@@ -114,7 +114,7 @@ pub const STAGE1: OutpostRules = OutpostRules {
         SocketRule {
             id: "b",
             name: "Socket B",
-            beside: "berth",
+            beside: "hangar deck",
             opens: SocketOpens::WithFirstFacility,
         },
     ],
@@ -794,7 +794,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fabrication_bay_beside_the_berth_cuts_fitting_prices() {
+    fn a_fabrication_bay_beside_the_hangar_deck_cuts_fitting_prices() {
         let mut home = build(&Outpost::default(), "a", "fabrication_bay");
         assert_eq!(RULES.fitting_discount(&home), 0);
         home = RULES.remove(&home, "a").unwrap().outpost;

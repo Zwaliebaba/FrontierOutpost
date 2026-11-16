@@ -39,7 +39,7 @@ COPY crates crates
 # Catalogue URLs are bundled by Vite. The context whitelist keeps editable sources and
 # previews out while including new facility/hull/station exports without a per-asset COPY.
 COPY Design/FrontierOutpost/*.glb Design/FrontierOutpost/
-COPY Design/FrontierOutpost/scene_manifest.json Design/FrontierOutpost/berths.json Design/FrontierOutpost/
+COPY Design/FrontierOutpost/scene_manifest.json Design/FrontierOutpost/
 COPY Design/Art Design/Art
 COPY client client
 

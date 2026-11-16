@@ -1,29 +1,60 @@
 /**
- * The outpost's models, authored by Design/FrontierOutpost/create_scene.py (plan 5.1): the
- * station with its construction sockets, and the facility modules at each tier. Node names are
- * the generator's: `Station_ROOT`, `Socket_A`, `Facility_<facility>_T<tier>`.
+ * The outpost's models, from the art pipeline (Design/Art, plan M9): the station's exterior with
+ * its tell hardpoints, its interior's cutaway with the construction sockets and the hangar deck,
+ * and each facility's modules and tells at every tier. Node names are the pipeline's:
+ * `StationExterior_ROOT`, `Tell_A`, `StationInterior_ROOT`, `Socket_A`, `Closure_C*`,
+ * `Parking_frigate`, `Facility_<facility>_T<tier>`, `Tell_<facility>_T<tier>`.
  */
 import { Group, Matrix4, Mesh, MeshStandardMaterial } from "three";
 import type { BufferGeometry, Material, Object3D } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { facilityEntry, legacyUrl } from "./catalogue";
+import { facilityEntry, hullEntry, npcEntry, stationEntry } from "./catalogue";
 import { frigateModel, gearOf } from "../view/frigate";
+import { npcModel } from "../view/npc";
 
-export interface OutpostModels {
-  /** The station, its root at the origin. Sockets are among its descendants. */
-  readonly station: Object3D;
-  /** Each socket's anchor, by the game's socket identifier: "a", "b". */
+/** The station's exterior and interior, each with its root at the origin. */
+export interface StationModels {
+  /** The station as it stands at the dock: one hangar mouth, the tells' hardpoints. */
+  readonly exterior: Object3D;
+  /** The cutaway: sockets, processor, cargo bay and the hangar deck. */
+  readonly interior: Object3D;
+  /** Each interior socket's anchor, by the game's socket identifier: "a", "b", "c". */
   readonly sockets: ReadonlyMap<string, Object3D>;
+  /**
+   * Each exterior tell hardpoint, by the socket it belongs to ("a", "b", "c") or "reactor".
+   */
+  readonly hardpoints: ReadonlyMap<string, Object3D>;
+  /**
+   * The closure plate shown on each socket while it is closed, a child of the socket's anchor.
+   * The interior models socket C's (`Closure_C*`); the other sockets get a copy of it, since a
+   * closed socket looks the same wherever it is (style guide §10).
+   */
+  readonly closures: ReadonlyMap<string, Object3D>;
+  /** The hangar deck's parking places, by hull: "frigate". */
+  readonly parking: ReadonlyMap<string, Object3D>;
+  /** The reactor upgrade's meshes (`Reactor_Upgrade*`), shown once it is bought (plan M10). */
+  readonly reactor: readonly Object3D[];
+}
+
+export interface OutpostModels extends StationModels {
   /** Each facility module, its root at the origin, by {@link facilityKey}. */
   readonly facilities: ReadonlyMap<string, Object3D>;
+  /** Each facility's exterior tell, its root at the origin, by {@link facilityKey}. */
+  readonly tells: ReadonlyMap<string, Object3D>;
   /** Load one facility on demand, sharing concurrent requests and parsed templates. */
   readonly loadFacility?: (id: string) => Promise<void>;
 }
 
-/** The outpost's models and the starter frigate (view/frigate), which waits on its berth. */
+/** The outpost's models and the starter frigate (view/frigate), parked on the hangar deck. */
 export interface LoadedModels extends OutpostModels {
   readonly frigate: Object3D;
+}
+
+/** The parsed templates of every facility loaded so far, modules and tells. */
+export interface FacilityTemplates {
+  readonly facilities: Map<string, Object3D>;
+  readonly tells: Map<string, Object3D>;
 }
 
 export function facilityKey(facility: string, tier: number): string {
@@ -31,7 +62,10 @@ export function facilityKey(facility: string, tier: number): string {
 }
 
 const SOCKET = /^Socket_([A-Z])$/;
+const HARDPOINT = /^Tell_([A-Z]|reactor)$/;
+const PARKING = /^Parking_([a-z][a-z0-9_]*)$/;
 const FACILITY = /^Facility_([a-z][a-z0-9_]*)_T(\d+)$/;
+const TELL = /^Tell_([a-z][a-z0-9_]*)_T(\d+)$/;
 
 export class ModelError extends Error {
   override name = "ModelError";
@@ -88,39 +122,100 @@ export function mergeByMaterial(
   root.updateMatrixWorld(true);
 }
 
+function rootOf(scene: Object3D, name: string): Object3D {
+  const root = scene.getObjectByName(name);
+  if (!root) throw new ModelError(`The station's model has no ${name}`);
+  root.position.set(0, 0, 0);
+  root.updateMatrixWorld(true);
+  return root;
+}
+
 /**
- * Finds the station, its sockets and the facility modules in the two loaded scenes, moves each
- * root to the origin (the GLBs keep their places in the Blender scene), and merges each one's
- * meshes by material.
+ * Finds the station's anchors in its two loaded scenes, moves each root to the origin, gathers
+ * each socket's closure plate under its anchor, and merges the rest of each model's meshes by
+ * material. The closures and the reactor's meshes stay separate, so they can be shown and hidden.
  */
-export function indexModels(stationScene: Object3D, facilitiesScene: Object3D): OutpostModels {
-  const station = stationScene.getObjectByName("Station_ROOT");
-  if (!station) throw new ModelError("station.glb has no Station_ROOT");
-  station.position.set(0, 0, 0);
-  station.updateMatrixWorld(true);
+export function indexStation(
+  exteriorScene: Object3D,
+  interiorScene: Object3D,
+  roots: { exterior: string; interior: string } = {
+    exterior: "StationExterior_ROOT",
+    interior: "StationInterior_ROOT",
+  },
+): StationModels {
+  const exterior = rootOf(exteriorScene, roots.exterior);
+  const interior = rootOf(interiorScene, roots.interior);
+  const hardpoints = new Map<string, Object3D>();
+  exterior.traverse((node) => {
+    const match = HARDPOINT.exec(node.name);
+    if (match?.[1]) hardpoints.set(match[1].toLowerCase(), node);
+  });
   const sockets = new Map<string, Object3D>();
-  station.traverse((node) => {
-    const match = SOCKET.exec(node.name);
-    if (match?.[1]) sockets.set(match[1].toLowerCase(), node);
+  const parking = new Map<string, Object3D>();
+  const plates = new Map<string, Object3D[]>();
+  const reactor: Object3D[] = [];
+  interior.traverse((node) => {
+    const socket = SOCKET.exec(node.name)?.[1];
+    if (socket) sockets.set(socket.toLowerCase(), node);
+    const hull = PARKING.exec(node.name)?.[1];
+    if (hull) parking.set(hull, node);
+    const closed = /^Closure_([A-Z])/.exec(node.name)?.[1];
+    if (closed && node instanceof Mesh) plates.set(closed, [...(plates.get(closed) ?? []), node]);
+    if (node.name.startsWith("Reactor_Upgrade")) reactor.push(node);
   });
-  const controls = new Set<Object3D>();
-  station.traverse((node) => {
-    if (node.name.startsWith("SocketClosure_")) controls.add(node);
-  });
-  mergeByMaterial(station, controls);
-  const facilities = new Map<string, Object3D>();
-  for (const node of [...facilitiesScene.children]) {
-    const match = FACILITY.exec(node.name);
-    if (!match?.[1] || !match[2]) continue;
-    node.position.set(0, 0, 0);
-    const indicators = new Set<Object3D>();
-    node.traverse((part) => {
-      if (part.name.startsWith("Operating_Tier_")) indicators.add(part);
-    });
-    mergeByMaterial(node, indicators);
-    facilities.set(facilityKey(match[1], Number(match[2])), node);
+  mergeByMaterial(exterior);
+  mergeByMaterial(interior, new Set([...[...plates.values()].flat(), ...reactor]));
+  const closures = new Map<string, Object3D>();
+  for (const [letter, parts] of plates) {
+    const anchor = sockets.get(letter.toLowerCase());
+    if (!anchor) continue;
+    const closure = new Group();
+    closure.name = `Closure_${letter}`;
+    anchor.add(closure);
+    for (const part of parts) closure.attach(part);
+    closures.set(letter.toLowerCase(), closure);
   }
-  return { station, sockets, facilities };
+  const [model] = closures.values();
+  for (const [id, anchor] of sockets) {
+    if (closures.has(id) || !model) continue;
+    const closure = model.clone();
+    closure.name = `Closure_${id.toUpperCase()}`;
+    anchor.add(closure);
+    closures.set(id, closure);
+  }
+  exterior.updateMatrixWorld(true);
+  interior.updateMatrixWorld(true);
+  return { exterior, interior, sockets, hardpoints, closures, parking, reactor };
+}
+
+/**
+ * Adds the facility modules and tells named `names` in `scene` to `templates`, each moved to the
+ * origin and merged by material. A module's operating indicators stay separate, so they can be
+ * lit one by one.
+ */
+export function indexFacilities(
+  scene: Object3D,
+  templates: FacilityTemplates,
+  names: readonly string[] = scene.children.map((node) => node.name),
+): void {
+  for (const name of names) {
+    const module = FACILITY.exec(name);
+    const tell = TELL.exec(name);
+    const match = module ?? tell;
+    if (!match?.[1] || !match[2]) continue;
+    const root = scene.getObjectByName(name);
+    if (!root) throw new ModelError(`Missing ${name}`);
+    root.position.set(0, 0, 0);
+    const preserved = new Set<Object3D>();
+    root.traverse((node) => {
+      if (node.name.startsWith("Operating_Tier_")) preserved.add(node);
+    });
+    mergeByMaterial(root, preserved);
+    (module ? templates.facilities : templates.tells).set(
+      facilityKey(match[1], Number(match[2])),
+      root,
+    );
+  }
 }
 
 /** Parses a GLB's bytes into its scene. */
@@ -135,7 +230,11 @@ export function parseGlb(bytes: ArrayBuffer): Promise<Object3D> {
           const materials = Array.isArray(node.material) ? node.material : [node.material];
           for (const material of materials) {
             if (material instanceof MeshStandardMaterial) {
-              if (material.name === "Amber" || material.name.startsWith("Windows"))
+              if (
+                material.name === "Amber" ||
+                material.name === "Ember" ||
+                material.name.startsWith("Windows")
+              )
                 material.emissiveIntensity = Math.min(material.emissiveIntensity, 1.8);
               else if (
                 material.name === "Cyan" ||
@@ -163,8 +262,12 @@ export async function fetchGlb(url: string): Promise<Object3D> {
 
 let loading: Promise<LoadedModels> | null = null;
 
+/**
+ * Loads a facility's file the first time it is asked for: its modules and its tells, every tier,
+ * in the one download, shared by concurrent requests.
+ */
 export function facilityLoader(
-  facilities: Map<string, Object3D>,
+  templates: FacilityTemplates,
   load: (url: string) => Promise<Object3D> = fetchGlb,
 ): (id: string) => Promise<void> {
   const pending = new Map<string, Promise<void>>();
@@ -178,21 +281,10 @@ export function facilityLoader(
             if (!scene.getObjectByName(name))
               throw new ModelError(`Missing catalogue root ${name}`);
           }
-          const indexed = new Map<string, Object3D>();
-          for (const name of entry.roots) {
-            const match = FACILITY.exec(name);
-            if (!match?.[1] || !match[2]) continue;
-            const root = scene.getObjectByName(name);
-            if (!root) throw new ModelError(`Missing ${name}`);
-            root.position.set(0, 0, 0);
-            const preserved = new Set<Object3D>();
-            root.traverse((node) => {
-              if (node.name.startsWith("Operating_Tier_")) preserved.add(node);
-            });
-            mergeByMaterial(root, preserved);
-            indexed.set(facilityKey(id, Number(match[2])), root);
-          }
-          for (const [key, root] of indexed) facilities.set(key, root);
+          const staged: FacilityTemplates = { facilities: new Map(), tells: new Map() };
+          indexFacilities(scene, staged, entry.roots);
+          for (const [key, root] of staged.facilities) templates.facilities.set(key, root);
+          for (const [key, root] of staged.tells) templates.tells.set(key, root);
         })
         .catch((error: unknown) => {
           pending.delete(id);
@@ -204,13 +296,18 @@ export function facilityLoader(
   };
 }
 
-/** Loads station and ship once; facilities wait until an installed module is first shown. */
+/** Loads the station and the ship once; facilities wait until an installed one is first shown. */
 export function loadOutpostModels(): Promise<LoadedModels> {
-  loading ??= Promise.all([fetchGlb(legacyUrl("station")), loadFrigate()]).then(
-    ([station, frigate]) => {
-      const indexed = indexModels(station, new Group());
-      const facilities = new Map<string, Object3D>();
-      return { ...indexed, facilities, loadFacility: facilityLoader(facilities), frigate };
+  const exterior = stationEntry("exterior");
+  const interior = stationEntry("interior");
+  loading ??= Promise.all([fetchGlb(exterior.url), fetchGlb(interior.url), loadFrigate()]).then(
+    ([outside, inside, frigate]) => {
+      const station = indexStation(outside, inside, {
+        exterior: exterior.root,
+        interior: interior.root,
+      });
+      const templates: FacilityTemplates = { facilities: new Map(), tells: new Map() };
+      return { ...station, ...templates, loadFacility: facilityLoader(templates), frigate };
     },
   );
   return loading;
@@ -218,9 +315,23 @@ export function loadOutpostModels(): Promise<LoadedModels> {
 
 /** Loads the starter frigate on its own, for the greybox. */
 export async function loadFrigate(): Promise<Object3D> {
-  const ship = frigateModel(await fetchGlb(legacyUrl("frigate")));
+  const entry = hullEntry("frigate");
+  const ship = frigateModel(await fetchGlb(entry.url), entry.root);
   // Four roster ships should not multiply every authored plate into a draw call.
   // Landing gear keeps its own transforms so deployment still animates.
   mergeByMaterial(ship, new Set(gearOf(ship)));
+  return ship;
+}
+
+/**
+ * Loads an NPC ship's model, or resolves null when the catalogue has none for it: that kind
+ * keeps its stand-in hull.
+ */
+export async function loadNpc(id: string): Promise<Object3D | null> {
+  const entry = npcEntry(id);
+  if (!entry) return null;
+  const ship = npcModel(await fetchGlb(entry.url), entry.root);
+  // Up to the NPC cap of one kind can fly at once: one draw call per material, not per plate.
+  mergeByMaterial(ship, new Set());
   return ship;
 }

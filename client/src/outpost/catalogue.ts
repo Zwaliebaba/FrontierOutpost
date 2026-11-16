@@ -46,3 +46,26 @@ export function facilityEntry(id: string): { url: string; roots: string[] } {
   if (!entry || entry.pending) throw new Error(`Facility art is not ready: ${id}`);
   return { url: urlFor(entry.glb), roots: Object.keys(entry.roots) };
 }
+
+/** The station's two models (design §11): the exterior at the dock, the interior's cutaway. */
+export function stationEntry(part: "exterior" | "interior"): { url: string; root: string } {
+  const entry = catalogue.assets[`station_${part}:${part}`];
+  const root = entry && Object.keys(entry.roots)[0];
+  if (!entry || entry.pending || !root) throw new Error(`Station art is not ready: ${part}`);
+  return { url: urlFor(entry.glb), root };
+}
+
+/** A hull's model, by the game's identifier (`frigate`): its GLB and its one root. */
+export function hullEntry(id: string): { url: string; root: string } {
+  const entry = catalogue.assets[`hull:${id}`];
+  const root = entry && Object.keys(entry.roots)[0];
+  if (!entry || !root) throw new Error(`Hull art is not in the catalogue: ${id}`);
+  return { url: urlFor(entry.glb), root };
+}
+
+/** An NPC ship's model, by the game's identifier (`raider`): its GLB and its one root. */
+export function npcEntry(id: string): { url: string; root: string } | null {
+  const entry = catalogue.assets[`npc:${id}`];
+  const root = entry && Object.keys(entry.roots)[0];
+  return entry && root ? { url: urlFor(entry.glb), root } : null;
+}

@@ -69,7 +69,7 @@ async fn a_session_records_sessions_launches_choices_reconfigurations_and_ending
         ));
     }
 
-    // Launch, fly out past the undock radius, turn about and dock.
+    // Launch, fly out of the hangar, turn about and dock.
     write(
         &mut send,
         &ClientMessage::Launch {

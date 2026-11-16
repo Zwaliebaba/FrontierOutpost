@@ -8,7 +8,7 @@ import { Vector3 } from "three";
 import { ExpeditionView, RESTING_ELEVATION } from "../game/render";
 import { JumpEffects } from "../game/jumpEffects";
 import type { EntityPose } from "../net/interpolation";
-import { loadOutpostModels } from "../outpost/models";
+import { loadFrigate } from "../outpost/models";
 import { useShipModel } from "../view/readability";
 
 /** Seconds at rest, spooling, and after arriving, for each of the loop's two jumps. */
@@ -105,9 +105,10 @@ window.addEventListener("resize", () => {
 });
 resize();
 
-loadOutpostModels()
-  .then((models) => {
-    useShipModel(models.frigate);
+// The frigate alone: the lab draws no station.
+loadFrigate()
+  .then((frigate) => {
+    useShipModel(frigate);
     view.world.redraw();
   })
   .catch(() => {

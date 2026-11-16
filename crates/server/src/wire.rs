@@ -3,15 +3,18 @@
 
 use frontier_protocol::{
     AccountInfo, AdjacencyInfo, Catalog, CostInfo, DominantThreat, Ending, FacilityInfo,
-    FittingInfo, Good, GoodAmount, Hazard, LaunchInfo, Material, MissingInfo, OutpostInfo,
-    PocketInfo, PocketKind, PriceInfo, QueuedInfo, RecipeInfo, RunSummary, ServerMessage, SiteInfo,
-    Slot, SocketRuleInfo, SocketState, SuppliesDue, TierInfo, TierOffer, UnlockInfo, WorkingInfo,
+    FittingInfo, Good, GoodAmount, Hazard, LaunchInfo, Material, MissingInfo, ObstacleInfo,
+    OutpostInfo, PocketInfo, PocketKind, PriceInfo, QueuedInfo, RecipeInfo, RunSummary,
+    ServerMessage, SiteInfo, Slot, SocketRuleInfo, SocketState, StationInfo, SuppliesDue, TierInfo,
+    TierOffer, UnlockInfo, WorkingInfo,
 };
+use frontier_sim::collision::Obstacle;
 use frontier_sim::fitting::{self, FITTINGS, Missing};
 use frontier_sim::market::{PRICES, RECIPES};
 use frontier_sim::outpost::{Bonus, STAGE1};
-use frontier_sim::run::{self, DOCK_RADIUS, LAUNCH_COST, seconds};
+use frontier_sim::run::{self, LAUNCH_COST, seconds};
 use frontier_sim::site::{self, Capability, Site, SiteTemplate, ThreatTier};
+use frontier_sim::station::{self, Station};
 use frontier_sim::{goods, outcome};
 
 use crate::account::Account;
@@ -28,7 +31,6 @@ pub fn crew(view: &crews::View) -> frontier_protocol::CrewInfo {
             .iter()
             .map(|(account, callsign, share)| frontier_protocol::CrewMember {
                 callsign: callsign.clone(),
-                berth: view.berth_slot(*account),
                 share: *share,
                 you: *account == view.you,
             })
@@ -451,8 +453,42 @@ pub fn site_info(site: &Site) -> SiteInfo {
                 material: pocket.template.material.map(material),
             })
             .collect(),
-        dock_radius: DOCK_RADIUS,
+        station: station_info(&site.station()),
     }
+}
+
+/// The station in world coordinates, as the wire carries it.
+#[must_use]
+pub fn station_info(station: &Station) -> StationInfo {
+    let (centre_x, centre_z) = station.centre();
+    let (forward_x, forward_z) = station.forward();
+    let (mouth_x, mouth_z) = station.mouth();
+    StationInfo {
+        centre_x,
+        centre_z,
+        forward_x,
+        forward_z,
+        mouth_x,
+        mouth_z,
+        lane_length: station::LANE_LENGTH,
+        capture_depth: station::CAPTURE_DEPTH,
+        mouth_width: station::MOUTH_WIDTH,
+        footprint_radius: station::FOOTPRINT_RADIUS,
+        obstacles: obstacles(&station.obstacles()),
+    }
+}
+
+/// Obstacles as the wire carries them.
+#[must_use]
+pub fn obstacles(obstacles: &[Obstacle]) -> Vec<ObstacleInfo> {
+    obstacles
+        .iter()
+        .map(|o| ObstacleInfo {
+            x: o.x,
+            z: o.z,
+            radius: o.radius,
+        })
+        .collect()
 }
 
 #[cfg(test)]

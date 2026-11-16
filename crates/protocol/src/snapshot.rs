@@ -137,21 +137,25 @@ pub struct EntityState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
 #[ts(export, rename_all = "camelCase")]
 pub enum RunPhase {
+    /// Launched, and flown out of the hangar by the server: not predicted.
     AtDock,
     Approach,
     Objective,
     Return,
+    /// Captured at the hangar mouth and drawn in by the server: not predicted.
+    Docking,
     Docked,
     Destroyed,
     Abandoned,
 }
 
 impl RunPhase {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         Self::AtDock,
         Self::Approach,
         Self::Objective,
         Self::Return,
+        Self::Docking,
         Self::Docked,
         Self::Destroyed,
         Self::Abandoned,

@@ -4,7 +4,7 @@ import { loadSimSync } from "../sim";
 import type { ShipControls, ShipState } from "../sim";
 import { createRng } from "../view/rng";
 import type { Rng } from "../view/rng";
-import { Predictor } from "./prediction";
+import { Predictor, predictsOwnShip, solidObstacles } from "./prediction";
 import { asServerReads } from "./session";
 
 // The real movement rules, compiled from Rust, as the browser runs them.
@@ -180,6 +180,21 @@ describe("predictor", () => {
     expect(last).toBeCloseTo(0.5, 2);
   });
 
+  it("shows no correction left over from a scripted path when the pilot takes the ship", () => {
+    const predictor = new Predictor(step);
+    predictor.reconcile(still, 0);
+    // The launch flies the ship while the pilot holds thrust the server ignores: each snapshot
+    // corrects the prediction a little, and nothing draws it, so nothing fades the corrections.
+    for (let i = 1; i <= 40; i += 1) {
+      predictor.advance(i, thrust);
+      predictor.reconcile({ ...still, x: i * 0.4, speed: 8 }, i - 1);
+      predictor.follow();
+    }
+    const state = predictor.state;
+    // Handed over: drawn where the prediction is, not seconds of corrections behind it.
+    expect(predictor.visual(1, 0.016)?.x).toBeCloseTo(state?.x ?? Number.NaN, 6);
+  });
+
   it("jumps straight to a large correction", () => {
     const predictor = new Predictor(step);
     predictor.reconcile(still, 0);
@@ -200,5 +215,37 @@ describe("the scout rig's speed", () => {
     const scout = fly();
     sim.setSpeedFactor(1);
     expect(scout / basic).toBeCloseTo(1.2, 3);
+  });
+});
+
+describe("what is predicted", () => {
+  it("leaves the scripted launch and draw-in to the server", () => {
+    expect(predictsOwnShip("atDock")).toBe(false);
+    expect(predictsOwnShip("docking")).toBe(false);
+    for (const phase of ["approach", "objective", "return"] as const) {
+      expect(predictsOwnShip(phase)).toBe(true);
+    }
+    expect(predictsOwnShip(null)).toBe(true);
+  });
+
+  it("collides with the station's hull as well as the asteroids", () => {
+    const rock = { x: 50, z: 0, radius: 2 };
+    const hull = { x: -120, z: 3, radius: 1.9 };
+    const site = {
+      station: {
+        centreX: -120,
+        centreZ: 0,
+        forwardX: 1,
+        forwardZ: 0,
+        mouthX: -106,
+        mouthZ: 0,
+        laneLength: 30,
+        captureDepth: 8,
+        mouthWidth: 8,
+        footprintRadius: 17,
+        obstacles: [hull],
+      },
+    };
+    expect(solidObstacles(site, [rock])).toEqual([rock, hull]);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { centreOf, firstHit, occludersHiding, rayEntry, rayHits } from "./occlusion";
+import { centreOf, contains, firstHit, occludersHiding, rayEntry, rayHits } from "./occlusion";
 import type { Occluder } from "./occlusion";
-import { stationOccluders } from "./stationProxy";
+import { legacyStationOccluders } from "./stationProxy";
 import { hiddenDepthBehind, viewDirectionAtElevation } from "../view/view";
 
 const toward = (elevation: number) => viewDirectionAtElevation(elevation);
@@ -90,10 +90,37 @@ describe("greybox occlusion", () => {
     expect(centreOf(sphere)).toEqual({ x: 0, y: 0, z: 0 });
   });
 
+  it("turns a box by its yaw and leaves an unturned one as it was", () => {
+    const long: Occluder = { kind: "box", x: 0, z: 0, halfX: 6, halfZ: 0.5, yMin: 0, yMax: 2 };
+    const turned: Occluder = { ...long, yaw: Math.PI / 2 };
+    const across = { x: 1, y: 0, z: 0 };
+    // Unturned, the box is long in x; a quarter turn makes it long in z.
+    expect(rayEntry({ x: -10, y: 1, z: 3 }, across, long)).toBeNull();
+    expect(rayEntry({ x: -10, y: 1, z: 3 }, across, turned)).toBeCloseTo(9.5);
+    expect(rayEntry({ x: -10, y: 1, z: 0 }, across, { ...long, yaw: 0 })).toBeCloseTo(4);
+    // A bearing of 45°: its X axis runs along (1, 1) on the plane.
+    const diagonal: Occluder = { ...long, yaw: Math.PI / 4 };
+    expect(contains({ x: 4, y: 1, z: 4 }, diagonal)).toBe(true);
+    expect(contains({ x: 4, y: 1, z: -4 }, diagonal)).toBe(false);
+    expect(rayHits({ x: 4, y: 1, z: 4 }, { x: 0, y: 1, z: 0 }, diagonal)).toBe(true);
+    expect(rayHits({ x: 4, y: 1, z: -4 }, { x: 0, y: 1, z: 0 }, diagonal)).toBe(false);
+  });
+
+  it("tells whether a point is inside each kind of structure", () => {
+    expect(contains({ x: 1.9, y: 3.9, z: -1.9 }, box)).toBe(true);
+    expect(contains({ x: 2.1, y: 1, z: 0 }, box)).toBe(false);
+    expect(contains({ x: 0, y: 4.1, z: 0 }, box)).toBe(false);
+    expect(contains({ x: 1.4, y: 1, z: 1.4 }, cylinder)).toBe(true);
+    expect(contains({ x: 1.5, y: 1, z: 1.5 }, cylinder)).toBe(false);
+    expect(contains({ x: 0, y: -0.1, z: 0 }, cylinder)).toBe(false);
+    expect(contains({ x: 0, y: 4.5, z: 0 }, sphere)).toBe(true);
+    expect(contains({ x: 0, y: 4.7, z: 0 }, sphere)).toBe(false);
+  });
+
   it("reports which station parts hide a ship behind the hub", () => {
     const view = toward(33);
     const horizontal = Math.hypot(view.x, view.z);
-    const occluders = stationOccluders();
+    const occluders = legacyStationOccluders();
     const behindHub = onPlane((-view.x / horizontal) * 5, (-view.z / horizontal) * 5);
     expect(occludersHiding(behindHub, view, occluders)).toContain(0);
     expect(occludersHiding(onPlane(0, 30), view, occluders)).toEqual([]);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OwnStatus, RunSummary } from "../protocol";
 import { clock, runCells, scanSummary, summaryLines } from "./contract";
 import type { Scanned } from "./contract";
-import { scanRefusalText } from "./contract";
+import { refusalText, scanRefusalText } from "./contract";
 
 const working: OwnStatus = {
   phase: "objective",
@@ -39,6 +39,15 @@ describe("runCells", () => {
       ["alert", "2 · clear"],
       ["contract", "7/10 cargo · pays 100 cr"],
     ]);
+  });
+
+  it("names the hangar's part of the run: the launch flying the ship out, the draw-in", () => {
+    expect(cell(runCells({ ...working, phase: "atDock" }, null), "phase")?.value).toBe(
+      "Leaving the hangar",
+    );
+    expect(cell(runCells({ ...working, phase: "docking" }, null), "phase")?.value).toBe(
+      "Drawn in to dock",
+    );
   });
 
   it("says when the hold has enough for the contract, and has no cell without one", () => {
@@ -156,6 +165,21 @@ describe("scanRefusalText", () => {
     expect(scanRefusalText("moving")).toBe("Scan: slow to a stop first");
     expect(scanRefusalText("outOfRange")).toContain("fly nearer");
     expect(scanRefusalText("revealed")).toContain("map");
+  });
+
+  it("says the hangar has the ship while the launch or the draw-in flies it", () => {
+    // Out on the lane the departure moves at 8 m/s, so the rules would say "slow to a stop".
+    expect(scanRefusalText("moving", "atDock")).toBe("Scan: not while leaving the hangar");
+    expect(scanRefusalText("outOfRange", "atDock")).toBe("Scan: not while leaving the hangar");
+    expect(scanRefusalText("moving", "docking")).toBe(
+      "Scan: not while the hangar draws the ship in",
+    );
+    // What is true whatever the ship does stays as it was.
+    expect(scanRefusalText("revealed", "atDock")).toContain("map");
+    expect(scanRefusalText("moving", "approach")).toBe("Scan: slow to a stop first");
+    expect(refusalText("notAtDeposit", "atDock")).toBe("Extractor: not while leaving the hangar");
+    expect(refusalText("notAtDeposit", "approach")).toBe("Extractor: hold still beside a deposit");
+    expect(refusalText("cargoFull", "atDock")).toBe("Extractor: the hold is full");
   });
 });
 

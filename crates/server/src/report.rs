@@ -128,10 +128,12 @@ pub struct Measure {
     pub basis: Basis,
     /// The pilots (accounts) the value rests on. Gate 2's greybox trials
     /// carry no account, so there it counts files: one per tester and vision
-    /// mode in the playtest script.
+    /// mode in the playtest script, for each station compared.
     pub pilots: usize,
     /// What the value was computed from, such as "12 defeats".
     pub from: String,
+    /// For gate 2's greybox trials, the setting they were flown in.
+    pub setting: Option<Setting>,
 }
 
 impl Measure {
@@ -151,11 +153,17 @@ impl Measure {
             basis,
             pilots,
             from,
+            setting: None,
         }
     }
 
     fn target(mut self, target: Target) -> Self {
         self.target = Some(target);
+        self
+    }
+
+    fn setting(mut self, setting: Setting) -> Self {
+        self.setting = Some(setting);
         self
     }
 
@@ -208,20 +216,46 @@ impl Gate {
     /// only that; `None` when nothing was measured against a threshold.
     #[must_use]
     pub fn verdict(&self, players: Players) -> Option<Verdict> {
-        let verdicts: Vec<Verdict> = self
+        combined(self.measures.iter(), players)
+    }
+
+    /// The outcome in each setting the gate's measures were taken in, by
+    /// the same rule as the gate's own, in the settings' order. Gate 2
+    /// compares stations this way (plan 9.1); the gate itself takes them all.
+    #[must_use]
+    pub fn verdicts_by_setting(&self, players: Players) -> Vec<(&Setting, Option<Verdict>)> {
+        let settings: BTreeSet<&Setting> = self
             .measures
             .iter()
-            .filter_map(|measure| measure.verdict(players))
+            .filter_map(|measure| measure.setting.as_ref())
             .collect();
-        [
-            Verdict::Failed,
-            Verdict::Unproven,
-            Verdict::MetByOwnerOnly,
-            Verdict::Met,
-        ]
-        .into_iter()
-        .find(|verdict| verdicts.contains(verdict))
+        settings
+            .into_iter()
+            .map(|setting| {
+                let measures = self
+                    .measures
+                    .iter()
+                    .filter(|measure| measure.setting.as_ref() == Some(setting));
+                (setting, combined(measures, players))
+            })
+            .collect()
     }
+}
+
+/// Failed if any measure failed; else unproven if any is; else met, by the
+/// owner only if any measure is only that.
+fn combined<'a>(measures: impl Iterator<Item = &'a Measure>, players: Players) -> Option<Verdict> {
+    let verdicts: Vec<Verdict> = measures
+        .filter_map(|measure| measure.verdict(players))
+        .collect();
+    [
+        Verdict::Failed,
+        Verdict::Unproven,
+        Verdict::MetByOwnerOnly,
+        Verdict::Met,
+    ]
+    .into_iter()
+    .find(|verdict| verdicts.contains(verdict))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -243,10 +277,58 @@ pub struct Trial {
     pub outcome: String,
 }
 
+/// The parts of a greybox file's configuration the report reads. Each is
+/// optional, so files from before a setting existed still parse.
 #[derive(Debug, Clone, Deserialize)]
 struct GreyboxConfig {
     #[serde(default)]
     vision: Option<String>,
+    #[serde(default)]
+    scene: Option<String>,
+    /// The station's scale against the Stage 1 station (plan 9.1).
+    #[serde(default)]
+    scale: Option<f64>,
+    /// Which way the ring's hangar mouth faced.
+    #[serde(default)]
+    facing: Option<String>,
+}
+
+/// What a greybox block was flown around. Trials from different settings
+/// are never pooled: a measure taken around one station says nothing about
+/// another (plan 9.1).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Setting {
+    /// The station scene. `tenths` is its scale in tenths: 10 is the Stage 1
+    /// station, which has no hangar mouth to face; above it, the M9 ring.
+    Station { tenths: u32, facing: Option<String> },
+    /// A scene without the station, by its greybox name.
+    Scene(String),
+}
+
+impl Setting {
+    /// The setting in words, as the report names it.
+    #[must_use]
+    pub fn shown(&self) -> String {
+        match self {
+            Self::Station { tenths, facing } => {
+                let scale = if tenths % 10 == 0 {
+                    format!("{}", tenths / 10)
+                } else {
+                    format!("{}.{}", tenths / 10, tenths % 10)
+                };
+                let facing = match facing.as_deref() {
+                    None => String::new(),
+                    Some("site") => ", mouth toward the site".to_owned(),
+                    Some("camera") => ", mouth toward the camera".to_owned(),
+                    Some("side") => ", mouth side-on".to_owned(),
+                    Some("away") => ", mouth away from the camera".to_owned(),
+                    Some(other) => format!(", mouth {other}"),
+                };
+                format!("station ×{scale}{facing}")
+            }
+            Self::Scene(scene) => format!("{scene} scene"),
+        }
+    }
 }
 
 /// A downloaded greybox result file.
@@ -261,6 +343,24 @@ impl Greybox {
     #[must_use]
     pub fn vision(&self) -> &str {
         self.config.vision.as_deref().unwrap_or("normal")
+    }
+
+    /// What the trials were flown around. A file without a scene is the
+    /// greybox's default, the station scene, and one without a scale was
+    /// made before the ring, so around the Stage 1 station. The ring's
+    /// facing defaults as the greybox's does, toward the site.
+    #[must_use]
+    pub fn setting(&self) -> Setting {
+        let config = &self.config;
+        let scene = config.scene.as_deref().unwrap_or("station");
+        if scene != "station" {
+            return Setting::Scene(scene.to_owned());
+        }
+        // The greybox offers scales in tenths; rounding absorbs the float.
+        let tenths = (config.scale.unwrap_or(1.0) * 10.0).round().max(0.0) as u32;
+        let facing =
+            (tenths != 10).then(|| config.facing.clone().unwrap_or_else(|| "site".to_owned()));
+        Setting::Station { tenths, facing }
     }
 }
 
@@ -629,23 +729,27 @@ fn gate_1(
 
 fn gate_2(events: &[Recorded], greybox: &[Greybox]) -> Gate {
     let mut measures = Vec::new();
-    let mut by_vision: BTreeMap<&str, (usize, Vec<&Trial>)> = BTreeMap::new();
+    // By setting first, so each station's measures sit together.
+    let mut by_setting: BTreeMap<(Setting, &str), (usize, Vec<&Trial>)> = BTreeMap::new();
     for file in greybox {
-        let (files, trials) = by_vision.entry(file.vision()).or_default();
+        let (files, trials) = by_setting
+            .entry((file.setting(), file.vision()))
+            .or_default();
         *files += 1;
         trials.extend(file.records.iter());
     }
     // Readability is a skill the owner has practised more than anyone.
-    for (vision, (files, trials)) in by_vision {
+    for ((setting, vision), (files, trials)) in by_setting {
         let measure = |name: &str, value, unit, from| {
             Measure::new(
-                &format!("{name} ({vision} vision)"),
+                &format!("{name} ({}, {vision} vision)", setting.shown()),
                 value,
                 unit,
                 Basis::Skill,
                 files,
                 from,
             )
+            .setting(setting.clone())
         };
         let of =
             |kind: &str| -> Vec<&&Trial> { trials.iter().filter(|t| t.kind == kind).collect() };
@@ -1096,6 +1200,21 @@ impl Report {
                 );
             }
             out.push('\n');
+            let settings = gate.verdicts_by_setting(self.players);
+            if !settings.is_empty() {
+                let _ = writeln!(
+                    out,
+                    "Greybox trials by setting, never pooled across settings; the gate takes \
+                     them all.\n"
+                );
+                let _ = writeln!(out, "| Setting | Verdict |");
+                let _ = writeln!(out, "| --- | --- |");
+                for (setting, verdict) in settings {
+                    let verdict = verdict.map_or("not measured", Verdict::shown);
+                    let _ = writeln!(out, "| {} | {verdict} |", setting.shown());
+                }
+                out.push('\n');
+            }
         }
         self.rules_table(&mut out);
         out
@@ -1340,10 +1459,21 @@ mod tests {
         events
     }
 
+    fn trial(kind: &str, ms: f64, outcome: &str) -> String {
+        format!(r#"{{"kind":"{kind}","ms":{ms},"outcome":"{outcome}"}}"#)
+    }
+
+    /// A greybox file with `config` (its JSON members) and `records`.
+    fn greybox_file(config: &str, records: &[String]) -> Greybox {
+        let json = format!(
+            r#"{{"config":{{{config}}},"summary":{{}},"records":[{}]}}"#,
+            records.join(",")
+        );
+        serde_json::from_str(&json).unwrap()
+    }
+
+    /// A file from before the station scale: the Stage 1 station.
     fn greybox() -> Greybox {
-        let trial = |kind: &str, ms: f64, outcome: &str| {
-            format!(r#"{{"kind":"{kind}","ms":{ms},"outcome":"{outcome}"}}"#)
-        };
         let mut records = vec![
             trial("acquire", 800.0, "correct"),
             trial("acquire", 1_200.0, "correct"),
@@ -1355,11 +1485,7 @@ mod tests {
         ];
         records.extend((0..9).map(|_| trial("heading", 2_000.0, "correct")));
         records.extend((0..4).map(|_| trial("range", 1_000.0, "correct")));
-        let json = format!(
-            r#"{{"config":{{"vision":"normal","scene":"station"}},"summary":{{}},"records":[{}]}}"#,
-            records.join(",")
-        );
-        serde_json::from_str(&json).unwrap()
+        greybox_file(r#""vision":"normal","scene":"station""#, &records)
     }
 
     fn value(report: &Report, gate: usize, name: &str) -> Option<f64> {
@@ -1518,7 +1644,7 @@ mod tests {
     fn the_markdown_shows_values_targets_verdicts_and_bases() {
         let markdown = compute(&history(), &[greybox()], Players::Testers, Vec::new()).markdown();
         assert!(markdown.contains(
-            "| Median time to select a named hostile (normal vision) | 0.9 s | ≤ 1.0 s | met | solo, skill | 1 | 3 selections |"
+            "| Median time to select a named hostile (station ×1, normal vision) | 0.9 s | ≤ 1.0 s | met | solo, skill | 1 | 3 selections |"
         ));
         assert!(markdown.contains(
             "| Defeats followed by a launch in that session or the next | 50% | ≥ 60% | failed | other players | 2 | 2 defeats |"
@@ -1676,5 +1802,116 @@ mod tests {
         assert!(markdown.contains(
             "| Rules: layout pairs where a facility changes the best choice open under both | 7% | > 0% | met | rules | – |"
         ));
+    }
+
+    #[test]
+    fn greybox_files_name_their_station_and_older_files_are_the_stage_1_station() {
+        let setting = |config: &str| greybox_file(config, &[]).setting();
+        let stage_1 = Setting::Station {
+            tenths: 10,
+            facing: None,
+        };
+        // Files from before the scene, the scale or the facing was recorded.
+        assert_eq!(setting(""), stage_1);
+        assert_eq!(setting(r#""vision":"grey""#), stage_1);
+        assert_eq!(greybox_file(r#""vision":"grey""#, &[]).vision(), "grey");
+        assert_eq!(greybox_file("", &[]).vision(), "normal");
+        assert_eq!(
+            setting(r#""scene":"station","scale":1,"facing":"away""#),
+            stage_1
+        );
+
+        let ring = setting(r#""scene":"station","scale":2.2,"facing":"camera""#);
+        assert_eq!(
+            ring,
+            Setting::Station {
+                tenths: 22,
+                facing: Some("camera".to_owned())
+            }
+        );
+        assert_eq!(ring.shown(), "station ×2.2, mouth toward the camera");
+        assert_eq!(
+            setting(r#""scene":"station","scale":3,"facing":"away""#).shown(),
+            "station ×3, mouth away from the camera"
+        );
+        assert_eq!(
+            setting(r#""scene":"station","scale":2.2"#).shown(),
+            "station ×2.2, mouth toward the site"
+        );
+        assert_eq!(stage_1.shown(), "station ×1");
+        // Other scenes have no station, whatever its settings say.
+        let rock = setting(r#""scene":"rock","scale":3,"facing":"side""#);
+        assert_eq!(rock, Setting::Scene("rock".to_owned()));
+        assert_eq!(rock.shown(), "rock scene");
+    }
+
+    #[test]
+    fn gate_2_reports_each_station_apart_and_never_pools_them() {
+        // The ring's block: every selection slow, every other judgement right.
+        let mut slow: Vec<String> = (0..4)
+            .map(|_| trial("acquire", 1_500.0, "correct"))
+            .collect();
+        slow.extend((0..4).map(|_| trial("heading", 2_000.0, "correct")));
+        slow.extend((0..4).map(|_| trial("range", 1_000.0, "correct")));
+        let ring = r#""vision":"normal","scene":"station","scale":2.2,"facing":"site""#;
+        let files = [greybox(), greybox_file(ring, &slow), greybox()];
+        let report = compute(&history(), &files, Players::Testers, Vec::new());
+
+        let stage_1 = "Median time to select a named hostile (station ×1, normal vision)";
+        let larger = "Median time to select a named hostile (station ×2.2, mouth toward the site, normal vision)";
+        // The two files around the Stage 1 station pool; the ring's stays apart.
+        assert_eq!(measure(&report, 1, stage_1).pilots, 2);
+        assert_eq!(measure(&report, 1, stage_1).from, "6 selections");
+        assert!(close(measure(&report, 1, stage_1).value, 0.9));
+        assert_eq!(measure(&report, 1, larger).pilots, 1);
+        assert!(close(measure(&report, 1, larger).value, 1.5));
+        // The Stage 1 station's measures come first, then the ring's.
+        let names: Vec<&str> = report.gates[1]
+            .measures
+            .iter()
+            .map(|m| m.name.as_str())
+            .collect();
+        assert_eq!(names.iter().position(|n| *n == stage_1), Some(0));
+        assert_eq!(names.iter().position(|n| *n == larger), Some(4));
+
+        // The gate takes every setting, so a failure around one fails it.
+        let gate = &report.gates[1];
+        assert_eq!(gate.verdict(Players::Testers), Some(Verdict::Failed));
+        let by_setting: Vec<(String, Option<Verdict>)> = gate
+            .verdicts_by_setting(Players::Testers)
+            .into_iter()
+            .map(|(setting, verdict)| (setting.shown(), verdict))
+            .collect();
+        // The Stage 1 station misses on its nearer-target share (80%).
+        assert_eq!(
+            by_setting,
+            [
+                ("station ×1".to_owned(), Some(Verdict::Failed)),
+                (
+                    "station ×2.2, mouth toward the site".to_owned(),
+                    Some(Verdict::Failed)
+                ),
+            ]
+        );
+
+        // Owner-only passes stay the owner's, station by station.
+        let passing = greybox_file(ring, &slow[4..]);
+        let report = compute(&owner_alone(), &[passing], Players::Owner, Vec::new());
+        let gate = &report.gates[1];
+        assert_eq!(
+            gate.verdicts_by_setting(Players::Owner)
+                .into_iter()
+                .map(|(_, verdict)| verdict)
+                .collect::<Vec<_>>(),
+            [Some(Verdict::MetByOwnerOnly)]
+        );
+
+        let markdown = compute(&history(), &files, Players::Testers, Vec::new()).markdown();
+        assert!(markdown.contains(&format!(
+            "| {larger} | 1.5 s | ≤ 1.0 s | failed | solo, skill | 1 | 4 selections |"
+        )));
+        assert!(markdown.contains("| Setting | Verdict |"));
+        assert!(markdown.contains("| station ×1 | failed |"));
+        assert!(markdown.contains("| station ×2.2, mouth toward the site | failed |"));
     }
 }

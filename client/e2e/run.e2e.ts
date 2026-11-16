@@ -1,4 +1,15 @@
-import { QUIET, expect, flyIntoSite, lastNotice, launch, position, test } from "./fixtures";
+import {
+  QUIET,
+  expect,
+  flyBackIntoTheMouth,
+  flyIntoSite,
+  lastNotice,
+  launch,
+  leaveHangar,
+  leaveHangarAndStop,
+  position,
+  test,
+} from "./fixtures";
 
 // These run on the quiet server: no NPCs open the run, so nothing interrupts the pilot.
 
@@ -42,14 +53,19 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
 
 test("pressing X away from a deposit explains why nothing happened", async ({ page }) => {
   await launch(page, QUIET);
+  // While the launch flies the ship out, the pilot is told so, not to hold still.
+  await page.keyboard.press("KeyX");
+  await expect(lastNotice(page)).toHaveText("Extractor: not while leaving the hangar");
+  await leaveHangar(page);
   await page.keyboard.press("KeyX");
   await expect(lastNotice(page)).toHaveText("Extractor: hold still beside a deposit");
 });
 
-test("pressing C away from the site explains why nothing happened", async ({ page }) => {
+test("pressing C while leaving the hangar explains why nothing happened", async ({ page }) => {
   await launch(page, QUIET);
+  // The launch flies the ship along the lane at 8 m/s: "slow to a stop" would ask the impossible.
   await page.keyboard.press("KeyC");
-  await expect(lastNotice(page)).toHaveText("Scan: out of range · fly nearer the site's centre");
+  await expect(lastNotice(page)).toHaveText("Scan: not while leaving the hangar");
 });
 
 test("a scan held still in the site reveals the rich pocket and the waves", async ({ page }) => {
@@ -107,22 +123,11 @@ test("flying out and back docks, shows the summary and offers the next contract"
 }) => {
   test.setTimeout(90_000);
   await launch(page, QUIET);
-  // Out past the undock radius, stop, turn about, and fly straight back.
-  await page.keyboard.down("KeyW");
-  await page.waitForTimeout(5_000);
-  await page.keyboard.up("KeyW");
-  await expect(page.locator("#run")).toHaveAttribute("data-phase", "approach");
-  await page.keyboard.down("KeyS");
-  await page.waitForTimeout(3_000);
-  await page.keyboard.up("KeyS");
-  // 2.4 rad/s: half a turn in about 1.3 seconds.
-  await page.keyboard.down("KeyA");
-  await page.waitForTimeout(1_310);
-  await page.keyboard.up("KeyA");
-  await page.keyboard.down("KeyW");
+  // Out of the hangar, stop, turn about, and fly straight back into the mouth.
+  await leaveHangarAndStop(page);
+  await flyBackIntoTheMouth(page);
   const summary = page.locator("#summary");
-  await expect(summary).toHaveAttribute("data-ending", "docked", { timeout: 20_000 });
-  await page.keyboard.up("KeyW");
+  await expect(summary).toHaveAttribute("data-ending", "docked");
   await expect(summary).toContainText("Banked: nothing");
   await expect(summary).toContainText("Your crew-pot share: 0 cr");
   // The contract was not met, so the supplies bought for this run are still aboard.
@@ -144,6 +149,9 @@ test("flying out and back docks, shows the summary and offers the next contract"
 
 test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
   await launch(page, QUIET);
+  // The launch flies the ship out: the cruise key does nothing until the lane's end.
+  await expect(page.locator('#prompts [data-prompt="cruise"]')).toHaveCount(0);
+  await leaveHangar(page);
   // On the leg nothing stops the drives, so the bar leaves them out and the cruise key is prompted.
   await expect(page.locator('#prompts [data-prompt="cruise"]')).toContainText("Shift");
   await expect(page.locator('#run [data-cell="drive"]')).toHaveCount(0);
@@ -155,7 +163,8 @@ test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
   const cruised = await position(page);
   await page.keyboard.up("KeyW");
   await page.keyboard.up("ShiftLeft");
-  // Two seconds from rest: about 10 m at normal speed, three times the acceleration on the drive.
+  // Two seconds from the launch's 8 m/s: under 20 m at normal speed, three times the
+  // acceleration on the drive.
   expect(cruised.x - start.x).toBeGreaterThan(20);
   // Prediction ran the drive too, so the server barely corrected it.
   const correction = Number(
@@ -166,6 +175,8 @@ test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
 
 test("without Shift the ship keeps normal speed", async ({ page }) => {
   await launch(page, QUIET);
+  // From rest: the launch hands the ship over under way.
+  await leaveHangarAndStop(page);
   const start = await position(page);
   await page.keyboard.down("KeyW");
   await page.waitForTimeout(2_000);

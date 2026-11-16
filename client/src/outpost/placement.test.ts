@@ -1,49 +1,93 @@
-import { Object3D, Vector3 } from "three";
+import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
+import exteriorGlb from "../../../Design/Art/station/exterior/exterior.glb?inline";
+import interiorGlb from "../../../Design/Art/station/interior/interior.glb?inline";
+import catalogue from "../../../Design/Art/catalogue.json";
 import { SHIP_HEIGHT } from "../view/hulls";
-import { BERTH, BERTHS, STATION_DROP, placeStation } from "./placement";
+import { indexStation, parseGlb } from "./models";
+import { HOME_STATION, STATION_HEIGHT, placeStation } from "./placement";
 
-/** Where a point in station space lands once the station is placed. */
-function world(placement: ReturnType<typeof placeStation>, x: number, y: number, z: number) {
-  const station = new Object3D();
-  station.position.set(placement.x, placement.y, placement.z);
-  station.rotation.y = placement.yaw;
-  station.updateMatrixWorld();
-  return station.localToWorld(new Vector3(x, y, z));
+const bytes = (url: string): ArrayBuffer =>
+  Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0)).buffer;
+
+const station = indexStation(
+  await parseGlb(bytes(exteriorGlb)),
+  await parseGlb(bytes(interiorGlb)),
+);
+
+/** Where the exterior's manifest puts a hardpoint in the station's own frame (Blender X, Y). */
+function authored(name: string): { across: number; along: number } {
+  const anchors: Record<string, { matrix: number[][] }> =
+    catalogue.assets["station_exterior:exterior"].roots.StationExterior_ROOT.anchors;
+  const matrix = anchors[name]?.matrix;
+  if (!matrix) throw new Error(`no anchor ${name}`);
+  return { across: matrix[0]?.[3] ?? 0, along: matrix[1]?.[3] ?? 0 };
+}
+
+/** The rules' distance from the station's centre to its mouth (frontier_sim::station). */
+const MOUTH_DISTANCE = 14;
+
+/** A station as the server sends it: the mouth `MOUTH_DISTANCE` out along `forward`. */
+function info(centreX: number, centreZ: number, angle: number) {
+  const [forwardX, forwardZ] = [Math.cos(angle), Math.sin(angle)];
+  return {
+    centreX,
+    centreZ,
+    forwardX,
+    forwardZ,
+    mouthX: centreX + forwardX * MOUTH_DISTANCE,
+    mouthZ: centreZ + forwardZ * MOUTH_DISTANCE,
+  };
 }
 
 describe("placing the station at the dock", () => {
-  it("reads the apron centre from the shared berth layout", () => {
-    expect(BERTH.x).toBeCloseTo(0, 3);
-    expect(BERTH.z).toBeCloseTo(4.33, 2);
-    expect(BERTH.deck).toBeCloseTo(0.86, 2);
-  });
-
-  for (const [name, dock, centre] of [
-    ["compact", { x: -120, z: 0 }, { x: 70, z: 0 }],
-    ["frontier", { x: -900, z: 0 }, { x: 620, z: 0 }],
-    ["diagonal", { x: 10, z: -40 }, { x: -30, z: 20 }],
+  for (const [name, at] of [
+    ["facing +x", info(-120, 0, 0)],
+    ["facing +z", info(10, -40, Math.PI / 2)],
+    ["facing -x", info(900, 30, Math.PI)],
+    ["diagonal", info(-30, 20, -2.3)],
+    ["shallow", info(5, 5, 0.4)],
   ] as const) {
-    it(`puts the berth on the dock and faces the site (${name})`, () => {
-      const placement = placeStation(dock, centre);
-      const berth = world(placement, BERTH.x, BERTH.deck, BERTH.z);
-      expect(berth.x).toBeCloseTo(dock.x, 6);
-      expect(berth.z).toBeCloseTo(dock.z, 6);
-      // A hull centred on the plane rests its underside on the deck.
-      expect(berth.y).toBeCloseTo(-SHIP_HEIGHT / 2, 6);
-      expect(placement.y).toBeCloseTo(-STATION_DROP, 6);
-      // The hub, at the station's origin, is behind the berth: away from the site.
-      const hub = world(placement, 0, 0, 0);
-      const toSite = Math.atan2(centre.z - dock.z, centre.x - dock.x);
-      const toHub = Math.atan2(hub.z - dock.z, hub.x - dock.x);
-      expect(Math.cos(toHub - toSite)).toBeCloseTo(-1, 6);
-      expect(placement.heading).toBeCloseTo(toSite, 6);
-      for (const slot of BERTHS) {
-        const at = world(placement, slot.x, slot.deck, slot.z);
-        // This is the authoritative simulation's lateral-offset convention.
-        expect(at.x).toBeCloseTo(dock.x + Math.sin(toSite) * slot.x, 6);
-        expect(at.z).toBeCloseTo(dock.z - Math.cos(toSite) * slot.x, 6);
+    it(`puts the hangar mouth where the rules do (${name})`, () => {
+      const placement = placeStation(at);
+      for (const root of [station.exterior, station.interior]) {
+        root.position.set(placement.x, placement.y, placement.z);
+        root.rotation.set(0, placement.yaw, 0);
+        root.updateMatrixWorld(true);
       }
+      const mouth = station.exterior.getObjectByName("Hangar_Mouth");
+      const world = mouth?.getWorldPosition(new Vector3());
+      expect(world?.x).toBeCloseTo(at.mouthX, 4);
+      expect(world?.z).toBeCloseTo(at.mouthZ, 4);
+      // The sill at deck level, half a hull below the plane ships fly on.
+      expect(world?.y).toBeCloseTo(-SHIP_HEIGHT / 2, 6);
+      expect(placement.y).toBe(STATION_HEIGHT);
+      expect(placement.heading).toBeCloseTo(Math.atan2(at.forwardZ, at.forwardX), 6);
+      // The station's frame: +across is (−Fz, Fx) and +along is F, so every hardpoint lands
+      // where the rules' frame puts its authored position: the exterior is not mirrored.
+      for (const [id, name] of [
+        ["a", "Tell_A"],
+        ["b", "Tell_B"],
+        ["c", "Tell_C"],
+      ] as const) {
+        const { across, along } = authored(name);
+        const tell = station.hardpoints.get(id)?.getWorldPosition(new Vector3());
+        expect(tell?.x).toBeCloseTo(at.centreX - at.forwardZ * across + at.forwardX * along, 4);
+        expect(tell?.z).toBeCloseTo(at.centreZ + at.forwardX * across + at.forwardZ * along, 4);
+      }
+      // The interior shares the frame: its hangar deck's parking place lies toward the mouth.
+      const parked = station.parking.get("frigate")?.getWorldPosition(new Vector3());
+      const along =
+        ((parked?.x ?? 0) - at.centreX) * at.forwardX +
+        ((parked?.z ?? 0) - at.centreZ) * at.forwardZ;
+      expect(along).toBeCloseTo(10, 4);
     });
   }
+
+  it("faces the rules' own default before a contract names a site", () => {
+    const placement = placeStation(HOME_STATION);
+    expect(placement).toMatchObject({ x: 0, z: 0, heading: 0 });
+    // A zero facing falls back the same way.
+    expect(placeStation({ ...HOME_STATION, forwardX: 0 }).heading).toBe(0);
+  });
 });

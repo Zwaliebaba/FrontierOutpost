@@ -25,6 +25,7 @@ const quiet: PromptInput = {
   locked: false,
   lockedInRange: false,
   hostileInLockRange: false,
+  toMouth: null,
 };
 const ids = (input: PromptInput) => prompts(input).map((prompt) => prompt.id);
 
@@ -81,6 +82,28 @@ describe("prompts", () => {
     expect(ids({ ...quiet, own: { ...leg, drive: "hunted" } })).toEqual([]);
   });
 
+  it("while the hangar flies the ship out or in, only says so: no key would do anything", () => {
+    const busy = { ...quiet, hostileInLockRange: true, scanned: false, toMouth: 4 };
+    const leaving = { ...own, phase: "atDock" as const, drive: "ready" as const };
+    expect(prompts({ ...busy, own: leaving })).toEqual([
+      { id: "departing", key: "", text: "Leaving the hangar · yours at the lane's end" },
+    ]);
+    expect(prompts({ ...busy, own: { ...leaving, phase: "docking" } })).toEqual([
+      { id: "docking", key: "", text: "Captured at the mouth · drawn in to dock" },
+    ]);
+  });
+
+  it("on the return leg near the station, says docking is flown into the mouth", () => {
+    const home = { ...own, phase: "return" as const, drive: "ready" as const };
+    expect(prompts({ ...quiet, own: home, toMouth: 34.4 })).toEqual([
+      { id: "dock", key: "", text: "Dock · fly straight into the hangar mouth · 34 m" },
+      { id: "cruise", key: "Shift", text: "Hold to cruise" },
+    ]);
+    // Far off, or straight after leaving it on the approach, it would only be noise.
+    expect(ids({ ...quiet, own: home, toMouth: 200 })).toEqual(["cruise"]);
+    expect(ids({ ...quiet, own: { ...home, phase: "approach" }, toMouth: 30 })).toEqual(["cruise"]);
+  });
+
   it("keeps to the most urgent few", () => {
     const busy: PromptInput = {
       own: { ...own, extractor: "on", heat: 250 },
@@ -90,6 +113,7 @@ describe("prompts", () => {
       locked: true,
       lockedInRange: true,
       hostileInLockRange: true,
+      toMouth: null,
     };
     expect(ids(busy)).toEqual(["vent", "fire", "scan"]);
     expect(prompts(busy).length).toBeLessThanOrEqual(MOST_PROMPTS);

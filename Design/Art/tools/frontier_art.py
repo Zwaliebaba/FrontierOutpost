@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 import tempfile
 
@@ -14,9 +15,9 @@ import bpy
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from game_data import facility_tiers
+from game_data import facility_tiers, npc_radii, station_geometry
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 ART = Path(__file__).resolve().parents[1]
 CONTRACT = json.loads((ART / "contract.json").read_text())
 
@@ -38,17 +39,35 @@ def asset_path(kind, identifier, art=ART):
         return art / "facilities" / identifier / f"{identifier}.blend"
     if kind == "hull":
         return art / "hulls" / identifier / f"{identifier}.blend"
+    if kind == "npc":
+        return art / "npcs" / identifier / f"{identifier}.blend"
     part = kind.removeprefix("station_")
     if identifier != part:
         raise ValueError(f"{kind} identifier must be '{part}'")
     return art / "station" / part / f"{part}.blend"
 
 
-def build_library(path):
-    if path.exists():
-        raise ValueError(f"Refusing to replace {path}; version material changes explicitly")
+def build_library(path, add_missing=False):
+    """Writes the contract's materials. With add_missing, an existing library keeps every
+    material it has, unchanged, and gains only the roles the contract added since."""
     materials = set()
+    if path.exists():
+        if not add_missing:
+            raise ValueError(f"Refusing to replace {path}; version material changes explicitly")
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        with bpy.data.libraries.load(str(path), link=False) as (source, target):
+            target.materials = list(source.materials)
+        for material in target.materials:
+            if material.name not in CONTRACT["materials"] or not material_matches_contract(material):
+                raise ValueError(f"Library material {material.name} differs from the contract")
+            material.use_fake_user = True
+            materials.add(material)
+    elif add_missing:
+        raise ValueError(f"No library at {path} to add to; create it with 'library'")
+    present = {material.name for material in materials}
     for role, settings in CONTRACT["materials"].items():
+        if role in present:
+            continue
         material = bpy.data.materials.new(role)
         material.use_nodes = True
         material.use_fake_user = True
@@ -92,6 +111,10 @@ def new_asset(kind, identifier, tiers=None, art=ART):
     if path.exists():
         raise ValueError(f"Refusing to overwrite {path}")
     known = facility_tiers() if kind == "facility" else {}
+    if kind == "hull" and identifier not in hull_identifiers():
+        raise ValueError(f"Unknown hull '{identifier}': list it in the contract's hulls")
+    if kind == "npc" and identifier not in npc_radii():
+        raise ValueError(f"Unknown NPC '{identifier}': it must be a ship kind in frontier_sim")
     if kind == "facility":
         if identifier in known and tiers is not None and tiers != known[identifier]:
             raise ValueError("Tier count differs from the game's data")
@@ -127,8 +150,11 @@ def new_asset(kind, identifier, tiers=None, art=ART):
         for name in [nodes["mouth"], *nodes["tells"]]:
             anchor = empty(name, exports, roots[0])
             if name == nodes["mouth"]:
-                anchor["opening_width"] = CONTRACT["hangar"]["min_width"]
-                anchor["opening_height"] = CONTRACT["hangar"]["min_height"]
+                # The rules own the mouth (frontier_sim station.rs); start the model on it.
+                rules = station_geometry()
+                anchor.location = (0, rules["mouth_distance"], 0)
+                anchor["opening_width"] = rules["mouth_width"]
+                anchor["opening_height"] = rules["mouth_height"]
     if kind == "station_interior":
         for name in [*nodes["sockets"], "Parking_frigate"]:
             empty(name, exports, roots[0])
@@ -207,6 +233,8 @@ def geometry(root):
             materials.update(m.name for m in mesh.materials if m)
         finally:
             evaluated.to_mesh_clear()
+    # How far the hull reaches from its centre on the gameplay plane, for collision circles.
+    planar_radius = max((math.hypot(p[0], p[1]) for p in points), default=0)
     bounds = None if not points else {
         "min": [min(p[i] for p in points) for i in range(3)],
         "max": [max(p[i] for p in points) for i in range(3)],
@@ -218,7 +246,35 @@ def geometry(root):
             anchors[obj.name] = {"matrix": [list(row) for row in transform],
                                  "properties": {key: obj[key] for key in ["opening_width", "opening_height"] if key in obj}}
     return {"bounds": bounds, "triangles": triangles, "materials": sorted(materials), "anchors": anchors,
-            "nodes": sorted(obj.name for obj in descendants(root))}
+            "nodes": sorted(obj.name for obj in descendants(root)), "planar_radius": planar_radius}
+
+
+def hull_identifiers():
+    """Every hull the contract lists: flown hulls, then display hulls (shown, never flown)."""
+    return [*CONTRACT["hulls"]["flown"], *CONTRACT["hulls"]["display"]]
+
+
+def station_rule_errors(name, record):
+    """The exterior against the rules' station (frontier_sim station.rs): the mouth where the
+    rules dock ships, its opening, the lane the contract keeps clear, and a footprint that the
+    rules' jump arrivals and asteroid clearance can rely on."""
+    rules = station_geometry()
+    errors = []
+    epsilon = CONTRACT["epsilon"] * 100
+    mouth = record["anchors"].get(CONTRACT["runtime_nodes"]["mouth"])
+    if mouth is not None:
+        position = [mouth["matrix"][i][3] for i in range(3)]
+        if any(abs(a - b) > epsilon for a, b in zip(position, [0, rules["mouth_distance"], 0])):
+            errors.append(f"rules: {name} mouth is not where the rules dock ships (0, {rules['mouth_distance']}, 0)")
+        properties = mouth["properties"]
+        for key, rule in [("opening_width", "mouth_width"), ("opening_height", "mouth_height")]:
+            if abs(properties.get(key, 0) - rules[rule]) > epsilon:
+                errors.append(f"rules: {name} mouth {key} differs from the rules' {rules[rule]} m")
+    if abs(CONTRACT["hangar"]["approach_length"] - rules["lane_length"]) > epsilon:
+        errors.append("rules: the contract's approach lane differs from the rules' lane")
+    if record["footprint_radius"] > rules["footprint_radius"] + epsilon:
+        errors.append(f"rules: {name} reaches {record['footprint_radius']:.2f} m, beyond the rules' footprint")
+    return errors
 
 
 def operating_name(tier, root):
@@ -332,6 +388,7 @@ def check_asset(art=ART):
         if root.get("frontier_kind") != kind or root.get("frontier_id") != identifier:
             errors.append(f"metadata: {root.name} custom properties differ")
         record = geometry(root)
+        planar_radius = record.pop("planar_radius")
         records[root.name] = record
         if not record["bounds"] or not record["triangles"]:
             errors.append(f"geometry: {root.name} has no surface geometry")
@@ -361,8 +418,26 @@ def check_asset(art=ART):
                 size = CONTRACT["tell"]["cube_size"]
                 if any(lo[i] < -size / 2 - epsilon or hi[i] > size / 2 + epsilon for i in [0, 1]) or lo[2] < -epsilon or hi[2] > size + epsilon:
                     errors.append(f"tell: {root.name} exceeds tell cube")
+        if kind == "station_exterior":
+            record["footprint_radius"] = planar_radius
+            errors.extend(station_rule_errors(root.name, record))
+        if kind == "npc":
+            radius = npc_radii().get(identifier)
+            if radius is None:
+                errors.append(f"identifier: {identifier} is not an NPC ship kind in frontier_sim")
+            else:
+                # The server collides the ship as this circle; the hull drawn stays inside it.
+                record["footprint_radius"] = planar_radius
+                record["collision_radius"] = radius
+                if planar_radius > radius + epsilon:
+                    errors.append(f"footprint: {root.name} reaches {planar_radius:.3f} m; collision radius is {radius} m")
         if kind == "hull":
             record["footprint_radius"] = max(math.hypot(x, y) for x in [lo[0], hi[0]] for y in [lo[1], hi[1]])
+            if identifier not in hull_identifiers():
+                errors.append(f"identifier: {identifier} is not a hull in the contract")
+            if identifier in CONTRACT["hulls"]["display"]:
+                # A display hull is shown, never flown: no mouth or parking place to fit.
+                continue
             exterior = art / "station/exterior/exterior.json"
             if exterior.exists():
                 station = json.loads(exterior.read_text())
@@ -394,6 +469,31 @@ def check_asset(art=ART):
         if roots:
             errors.extend(check(roots[0], kind, art))
     return sorted(set(errors)), records
+
+
+def render_preview(scene, records, path):
+    """Renders the review preview: each tier and tell side by side, roots restored after."""
+    roots = [o for o in bpy.data.collections["Export"].objects if o.parent is None]
+    saved = {o: o.matrix_world.copy() for o in roots}
+    try:
+        kind = scene["frontier_kind"]
+        if kind == "facility":
+            step = CONTRACT["socket"]["half_width"] * 2 + 0.7
+            for root in roots:
+                root.location.x = (root["tier"] - 1) * step
+                root.location.y = -2.5 if root.name.startswith("Tell_") else 0
+        bpy.context.view_layer.update()
+        points = []
+        for root in roots:
+            bounds = records[root.name]["bounds"]
+            points.extend(root.matrix_world @ Vector((x, y, z)) for x in [bounds["min"][0], bounds["max"][0]] for y in [bounds["min"][1], bounds["max"][1]] for z in [bounds["min"][2], bounds["max"][2]])
+        centre = sum(points, Vector()) / len(points)
+        setup_presentation(scene, centre, max((p - centre).length for p in points) * 2.5)
+        scene.render.filepath = str(path)
+        bpy.ops.render.render(write_still=True)
+    finally:
+        for root, matrix in saved.items():
+            root.matrix_world = matrix
 
 
 def export_asset(art=ART):
@@ -436,28 +536,14 @@ def export_asset(art=ART):
                                   use_selection=True, export_yup=True, export_extras=True,
                                   export_animations=False, export_cameras=False, export_lights=False,
                                   export_apply=True)
-        # Present each tier and tell side by side; export always retains roots at origin.
-        roots = [o for o in bpy.data.collections["Export"].objects if o.parent is None]
-        saved = {o: o.matrix_world.copy() for o in roots}
-        try:
-            kind = scene["frontier_kind"]
-            if kind == "facility":
-                step = CONTRACT["socket"]["half_width"] * 2 + 0.7
-                for root in roots:
-                    root.location.x = (root["tier"] - 1) * step
-                    root.location.y = -2.5 if root.name.startswith("Tell_") else 0
-            bpy.context.view_layer.update()
-            points = []
-            for root in roots:
-                bounds = records[root.name]["bounds"]
-                points.extend(root.matrix_world @ Vector((x, y, z)) for x in [bounds["min"][0], bounds["max"][0]] for y in [bounds["min"][1], bounds["max"][1]] for z in [bounds["min"][2], bounds["max"][2]])
-            centre = sum(points, Vector()) / len(points)
-            setup_presentation(scene, centre, max((p - centre).length for p in points) * 2.5)
-            scene.render.filepath = str(temp / preview.name)
-            bpy.ops.render.render(write_still=True)
-        finally:
-            for root, matrix in saved.items():
-                root.matrix_world = matrix
+        # A render differs by noise every time, so an unchanged model keeps its checked preview:
+        # a tool or contract change then rewrites manifests, not every preview in history.
+        previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+        if (preview.exists() and previous.get("sha256") == sha(temp / target.name)
+                and previous.get("roots") == records and previous.get("preview_sha256") == sha(preview)):
+            shutil.copyfile(preview, temp / preview.name)
+        else:
+            render_preview(scene, records, temp / preview.name)
         manifest = {"schema_version": 1, "kind": scene["frontier_kind"], "id": scene["frontier_id"],
                     "planned": scene["frontier_kind"] == "facility" and scene["frontier_id"] not in facility_tiers(), "tiers": scene["frontier_tiers"],
                     "tool_version": VERSION, "blender_version": bpy.app.version_string,
@@ -476,9 +562,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--art-root", type=Path, default=ART, help="Alternate workspace for fixtures")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("library", help="Create shared materials.blend, without replacing one")
+    library = commands.add_parser("library", help="Create shared materials.blend, without replacing one")
+    library.add_argument("--add-missing", action="store_true",
+                         help="Add contract roles an existing library lacks; existing ones stay unchanged")
     new = commands.add_parser("new", help="Create an empty editable template")
-    new.add_argument("kind", choices=["facility", "hull", "station_exterior", "station_interior"])
+    new.add_argument("kind", choices=["facility", "hull", "npc", "station_exterior", "station_interior"])
     new.add_argument("id")
     new.add_argument("--tiers", type=int, help="Explicit tier count for planned facilities only")
     commands.add_parser("check", help="Validate the open file; write nothing")
@@ -487,7 +575,7 @@ def main(argv=None):
     split_command.add_argument("--source", type=Path, default=ART.parent / "FrontierOutpost/FrontierOutpost.blend")
     args = parser.parse_args(argv)
     if args.command == "library":
-        build_library(args.art_root / "library/materials.blend")
+        build_library(args.art_root / "library/materials.blend", args.add_missing)
     elif args.command == "new":
         new_asset(args.kind, args.id, args.tiers, args.art_root)
     elif args.command == "check":

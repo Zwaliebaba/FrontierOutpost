@@ -7,7 +7,11 @@ by hand.
 
 ## Implemented
 
-- `new`, `check` and `export` support facilities, hulls, station exteriors and interiors.
+- `new`, `check` and `export` support facilities, hulls, NPC ships, station exteriors and
+  interiors. NPC ships take their identifiers and collision radii from `frontier_sim`'s
+  profiles through `game_data.py`; the raider is the first, and the client draws it in place of
+  the forked stand-in. Its source was generated with Blender 4.3.0, which re-exported the four
+  facilities byte-identically (only manifests and previews changed).
   Blender 4.3.2 generated and verified the committed sources. The tool uses APIs compatible
   with Blender 4.3+ and 5.x; a Blender 5 run has not been performed here.
 - Every asset links the shared material library. `contract.json` owns envelopes, budgets,
@@ -45,6 +49,8 @@ Run from the repository root, with `blender` on PATH. On Windows, use the full p
 ```sh
 # One-time shared library creation; refuses to replace an existing library.
 blender -b --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- library
+# After a contract adds material roles: adds only the missing ones, leaving the rest unchanged.
+blender -b --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- library --add-missing
 
 # Derives tier count from the gameplay rules. Refuses to overwrite a source.
 blender -b --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- new facility refinery
@@ -86,6 +92,16 @@ There are no timestamps in manifests. A tool, contract or library change require
 affected sources and regenerating the catalogue.
 
 Keep the whole `Design/Art/` folder when moving sources: linked material paths are relative.
+Exports keep a model's checked preview when the GLB and its records are unchanged, so a tool,
+contract or library change rewrites manifests instead of re-rendering every preview (a render
+differs by noise every time, and each preview stays in Git history).
+
+`migrate_hulls.py` moved the frozen scene's starter frigate and Aurora cruiser into hull files
+once, appending the original objects with their bevel and weighted-normal modifiers (so the
+exports kept the frozen GLBs' triangles, vertices and part names) and mapping their materials to
+library roles, with `IdleCyan` and `WhiteCore` added for the frigate's idle drive and the
+cruiser's engine cores. Lights and exhaust plumes stayed behind as presentation.
+`model_raider.py` likewise reproduces the raider from a new `npc raider` template.
 `model_crew_quarters.py` reproduces the initial example from an empty two-tier template and
 refuses to replace existing geometry. It is an authoring aid, not a required export step;
 manual modelling and editing are supported.

@@ -1,60 +1,54 @@
 /**
- * Where the station stands in a run, so the outpost and the expedition are one place: berth 07
- * sits on the site's dock, where pilots launch and dock, and faces the site, so a launching ship
- * flies straight off the deck and away from the station. The outpost view shows the station
- * turned the same way, so launching only moves the camera from the station to the ship.
+ * Where the station stands, so the outpost and the expedition are one place (design §11): at the
+ * site's dock, its hangar mouth facing the site's centre, the way ships launch. The rules own that
+ * geometry (frontier_sim::station) and send it in `SiteInfo.station`; the client only turns the
+ * models to match. The outpost view shows the station turned the same way, so launching only
+ * moves the camera from the station to the ship.
  */
-import layout from "../../../Design/FrontierOutpost/berths.json";
+import type { StationInfo } from "../protocol";
 import { SHIP_HEIGHT } from "../view/hulls";
 
-/** The apron centre, aligned with the simulation's dock. Individual slots are lateral offsets. */
-export const BERTH = { x: 0, z: -layout.centreY, deck: layout.deck };
-export const BERTHS = layout.berths.map((b) => ({ ...BERTH, x: b.x, id: b.id }));
-
 /**
- * How far below the gameplay plane the station's origin sits (design §5: one plane). Hulls are
- * drawn centred on the plane (view/hulls), so the deck lies half a hull below it, where a ship's
- * underside rests: otherwise the deck would hide the lower half and draw it as a silhouette.
+ * How high the station's origin stands (design §5: one plane). Hulls are drawn centred on the
+ * plane (view/hulls), so the hangar deck and the mouth's sill, at the models' z = 0, lie half a
+ * hull below it: a ship flies through the mouth at deck level, its underside on the deck.
  */
-export const STATION_DROP = BERTH.deck + SHIP_HEIGHT / 2;
+export const STATION_HEIGHT = -SHIP_HEIGHT / 2;
 
 export interface Placement {
   x: number;
   z: number;
   /** Rotation about Y, radians, as three.js applies it. */
   yaw: number;
-  /** Height of the station's origin: `-STATION_DROP`. */
+  /** Height of the station's origin: `STATION_HEIGHT`. */
   y: number;
-  /** The heading a ship on the berth faces to fly away from the station. */
+  /** The heading out of the hangar mouth, in the ships' convention: (cos h, sin h) in (x, z). */
   heading: number;
 }
 
-/**
- * The station placed with its berth on `dock` and facing `toward` (the site's centre). The
- * berth's launch direction is station-space +Z, away from the hub.
- */
-export function placeStation(
-  dock: { x: number; z: number },
-  toward: { x: number; z: number },
-): Placement {
-  const heading = Math.atan2(toward.z - dock.z, toward.x - dock.x);
-  // Rotating about Y by `yaw` turns station-space +Z to (sin yaw, cos yaw) on the plane.
-  const yaw = Math.PI / 2 - heading;
-  const [sin, cos] = [Math.sin(yaw), Math.cos(yaw)];
-  // The berth's world position is the station's plus the rotated berth offset.
-  const bx = BERTH.x * cos + BERTH.z * sin;
-  const bz = -BERTH.x * sin + BERTH.z * cos;
-  return { x: dock.x - bx, z: dock.z - bz, yaw, y: -STATION_DROP, heading };
-}
+/** The part of `StationInfo` that places the models: where it stands and which way it faces. */
+export type StationPose = Pick<StationInfo, "centreX" | "centreZ" | "forwardX" | "forwardZ">;
 
-/** Actual launch/departure positions, using the same lateral offsets as the simulation. */
-export function berthPositions(
-  dock: { x: number; z: number },
-  toward: { x: number; z: number },
-): { x: number; z: number }[] {
-  const heading = Math.atan2(toward.z - dock.z, toward.x - dock.x);
-  return BERTHS.map((berth) => ({
-    x: dock.x + berth.x * Math.sin(heading),
-    z: dock.z - berth.x * Math.cos(heading),
-  }));
+/**
+ * Before any contract names a site: the station at the origin facing +x, the rules' own fallback
+ * (`Station::new` with no facing). The first contract turns it to its site's dock at once.
+ */
+export const HOME_STATION: StationPose = { centreX: 0, centreZ: 0, forwardX: 1, forwardZ: 0 };
+
+/**
+ * The models placed as the rules stand the station. The station's frame (across, along) is the
+ * models' Blender (X, Y), which glTF carries as (x, −z); world (x, z) is centre + across·(−Fz, Fx)
+ * + along·(Fx, Fz). Turning by ψ = atan2(−Fx, −Fz) about +Y takes glTF −z onto F and +x onto
+ * (−Fz, Fx), so the model is not mirrored.
+ */
+export function placeStation(station: StationPose): Placement {
+  const length = Math.hypot(station.forwardX, station.forwardZ);
+  const [fx, fz] = length > 1e-9 ? [station.forwardX / length, station.forwardZ / length] : [1, 0];
+  return {
+    x: station.centreX,
+    z: station.centreZ,
+    yaw: Math.atan2(-fx, -fz),
+    y: STATION_HEIGHT,
+    heading: Math.atan2(fz, fx),
+  };
 }

@@ -3,30 +3,33 @@
 //! pocket, the drive spools for [`SPOOL_TICKS`], and the ship arrives near it
 //! at rest.
 //!
-//! It spools only once the ship has flown clear of the dock (past
-//! [`crate::run::UNDOCK_RADIUS`]): a jump is made from open space, never from
-//! the berth. Its limits keep design section 2's risk on the way home: it
+//! It spools only once the launch has handed the ship to its pilot at the end
+//! of the station's lane: a jump is made from open space, never from the
+//! hangar. Its limits keep design section 2's risk on the way home: it
 //! spools only while the cruise drive could engage (not while a hostile has the ship
 //! locked or the extractor works), and a jump home with cargo lands short of
-//! the dock, outside the site, so the return leg's interceptors still stand
-//! between the ship and the berth. A pocket jump lands outside the pocket,
-//! facing it, so the pilot sees what guards it before going in.
+//! the station, outside the site, so the return leg's interceptors still stand
+//! between the ship and the hangar. A jump home is measured from the hangar
+//! mouth and never lands on the station's hull. A pocket jump lands outside
+//! the pocket, facing it, so the pilot sees what guards it before going in.
 //!
 //! The spool time and distances are placeholders, to be tuned in play.
 
 use crate::TICKS_PER_SECOND;
+use crate::collision::SHIP_RADIUS;
 use crate::ship::{ARENA_HALF_WIDTH, ShipState};
 use crate::site::SiteTemplate;
+use crate::station::Station;
 
 /// How long the drive spools before the ship jumps.
 pub const SPOOL_TICKS: u32 = 6 * TICKS_PER_SECOND;
 /// How far outside a pocket's edge a jump to it arrives, metres.
 pub const POCKET_STANDOFF: f32 = 40.0;
-/// How far from the dock an empty ship jumping home arrives, metres: outside
-/// the berth, so docking is still flown.
+/// How far from the hangar mouth an empty ship jumping home arrives, metres:
+/// outside the station, so docking is still flown.
 pub const DOCK_STANDOFF: f32 = 40.0;
 /// How far beyond the interceptors' reach a laden ship jumping home arrives,
-/// metres, so they appear between it and the dock.
+/// metres, so they appear between it and the station.
 pub const LADEN_MARGIN: f32 = 40.0;
 
 /// Where a pilot asks to jump.
@@ -42,7 +45,7 @@ pub enum Target {
 pub enum Refusal {
     /// The ship is docked, destroyed, held inert or the run is over.
     NotFlying,
-    /// The ship has not yet flown clear of the dock since launch.
+    /// The ship is still leaving the hangar, or being drawn into it.
     AtDock,
     /// A hostile has the ship locked.
     Hunted,
@@ -95,31 +98,38 @@ pub fn pocket_arrival(
     at_rest(centre.0 - ux * back, centre.1 - uz * back, ux, uz)
 }
 
-/// Where a ship jumping home arrives. Empty, it arrives [`DOCK_STANDOFF`]
-/// from the dock. Laden, it arrives beyond the interceptors' reach but still
-/// outside the site, so that leaving the site triggers the return leg and
-/// its raiders appear between the ship and the dock.
+/// Where a ship jumping home arrives, measured from the hangar mouth on the
+/// side the ship comes from. Empty, it arrives [`DOCK_STANDOFF`] from the
+/// mouth. Laden, it arrives beyond the interceptors' reach but still outside
+/// the site, so that leaving the site triggers the return leg and its
+/// raiders appear between the ship and the station. It never lands on the
+/// station's footprint.
 #[must_use]
 pub fn dock_arrival(from: ShipState, template: &SiteTemplate, laden: bool) -> ShipState {
-    let dock = template.dock;
-    let (dx, dz) = (from.x - dock.0, from.z - dock.1);
+    let station = Station::for_site(template);
+    let mouth = station.mouth();
+    let (dx, dz) = (from.x - mouth.0, from.z - mouth.1);
     let (dx, dz) = if dx.hypot(dz) > 1.0 {
         (dx, dz)
     } else {
-        (template.centre.0 - dock.0, template.centre.1 - dock.1)
+        station.forward()
     };
     let length = dx.hypot(dz).max(f32::EPSILON);
     let (ux, uz) = (dx / length, dz / length);
     let distance = if laden {
-        let to_site =
-            (template.centre.0 - dock.0).hypot(template.centre.1 - dock.1) - template.radius - 10.0;
+        let to_site = (template.centre.0 - mouth.0).hypot(template.centre.1 - mouth.1)
+            - template.radius
+            - 10.0;
         (template.intercept_distance + LADEN_MARGIN)
             .min(to_site)
             .max(DOCK_STANDOFF)
     } else {
         DOCK_STANDOFF
     };
-    at_rest(dock.0 + ux * distance, dock.1 + uz * distance, -ux, -uz)
+    let arrival = at_rest(mouth.0 + ux * distance, mouth.1 + uz * distance, -ux, -uz);
+    // The arena's edge can pull an arrival back towards the hull.
+    let (x, z) = station.outside((arrival.x, arrival.z), SHIP_RADIUS);
+    ShipState { x, z, ..arrival }
 }
 
 /// A ship at rest at (x, z), facing along (ux, uz), inside the arena.
@@ -178,23 +188,47 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_ship_jumping_home_arrives_just_outside_the_berth() {
+    fn an_empty_ship_jumping_home_arrives_just_outside_the_mouth() {
         let arrival = dock_arrival(at(560.0, -60.0), &FRONTIER_SITE, false);
-        let (dx, dz) = FRONTIER_SITE.dock;
-        assert!(((arrival.x - dx).hypot(arrival.z - dz) - DOCK_STANDOFF).abs() < 0.01);
+        let (mx, mz) = Station::for_site(&FRONTIER_SITE).mouth();
+        assert!(((arrival.x - mx).hypot(arrival.z - mz) - DOCK_STANDOFF).abs() < 0.01);
         assert!(
             arrival.heading.cos() < 0.0,
-            "facing the dock, which is behind it"
+            "facing the station, which is behind it"
         );
     }
 
     #[test]
-    fn a_laden_ship_jumping_home_arrives_short_of_the_dock_and_outside_the_site() {
+    fn a_jump_home_never_lands_on_the_station_from_any_direction() {
+        for template in [FRONTIER_SITE, COMPACT_SITE] {
+            let station = Station::for_site(&template);
+            let (cx, cz) = station.centre();
+            for step in 0..72 {
+                let angle = (step as f32 * 5.0).to_radians();
+                // From right beside the hull, from beyond it, and from afar.
+                for distance in [0.0, 5.0, 18.0, 25.0, 60.0, 400.0] {
+                    let from = at(cx + angle.cos() * distance, cz + angle.sin() * distance);
+                    for laden in [false, true] {
+                        let arrival = dock_arrival(from, &template, laden);
+                        assert!(
+                            !station.overlaps_footprint((arrival.x, arrival.z)),
+                            "{}: from {step} at {distance} m, laden {laden}",
+                            template.name
+                        );
+                        assert!(arrival.x.is_finite() && arrival.z.is_finite());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_laden_ship_jumping_home_arrives_short_of_the_station_and_outside_the_site() {
         for template in [FRONTIER_SITE, COMPACT_SITE] {
             let ore = template.pockets[0].centre;
             let arrival = dock_arrival(at(ore.0, ore.1), &template, true);
-            let (dx, dz) = template.dock;
-            let from_dock = (arrival.x - dx).hypot(arrival.z - dz);
+            let (mx, mz) = Station::for_site(&template).mouth();
+            let from_mouth = (arrival.x - mx).hypot(arrival.z - mz);
             let (cx, cz) = template.centre;
             assert!(
                 (arrival.x - cx).hypot(arrival.z - cz) > template.radius,
@@ -202,14 +236,14 @@ mod tests {
                 template.name
             );
             assert!(
-                from_dock > DOCK_STANDOFF,
-                "{}: short of the dock",
+                from_mouth > DOCK_STANDOFF,
+                "{}: short of the station",
                 template.name
             );
         }
         let arrival = dock_arrival(at(560.0, -60.0), &FRONTIER_SITE, true);
-        let (dx, dz) = FRONTIER_SITE.dock;
-        let from_dock = (arrival.x - dx).hypot(arrival.z - dz);
-        assert!((from_dock - (FRONTIER_SITE.intercept_distance + LADEN_MARGIN)).abs() < 0.01);
+        let (mx, mz) = Station::for_site(&FRONTIER_SITE).mouth();
+        let from_mouth = (arrival.x - mx).hypot(arrival.z - mz);
+        assert!((from_mouth - (FRONTIER_SITE.intercept_distance + LADEN_MARGIN)).abs() < 0.01);
     }
 }

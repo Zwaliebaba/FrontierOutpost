@@ -1,16 +1,16 @@
 {
-  "blender_version": "4.3.2",
+  "blender_version": "4.3.0",
   "bounds_space": "root-local Blender Z-up metres",
   "glb": "sensor_array.glb",
   "gltf_up": "+Y",
   "id": "sensor_array",
   "inputs": {
-    "blender": "4.3.2",
-    "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
-    "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
-    "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
+    "blender": "4.3.0",
+    "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
+    "game_data_reader": "2e4ed127f595d54db31a411c295752a6cdabf6b4aebaefe34ec5672eddab260c",
+    "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
     "source": "d22a2516981f504f6e1e324a3bec76da2df3cabd05586e09885e2056c3692dbd",
-    "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
+    "tool": "ae209a2304f46b7663ab3a23298224ede7b279c05616bddd8192d7532af489fc"
   },
   "kind": "facility",
   "planned": false,
@@ -190,6 +190,6 @@
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 2,
-  "tool_version": "0.1.0",
+  "tool_version": "0.2.0",
   "units": "metres"
 }

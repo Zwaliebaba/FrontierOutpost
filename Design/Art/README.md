@@ -31,7 +31,8 @@ Design/Art/
     <id>.glb                the export: every tier and every tell
     <id>.json               the export's manifest
     <id>.png                a small preview, for review
-  hulls/<id>/               the same four files per hull
+  hulls/<id>/               the same four files per hull (the contract lists flown and display hulls)
+  npcs/<id>/                the same four files per NPC ship
   station/exterior/         the same four files for the station's exterior
   station/interior/         the same four files for the station's interior
 ```
@@ -45,6 +46,7 @@ in the folder, the files, the roots and the game's data.
 |---|---|---|
 | `facility` | `Facility_<id>_T<n>` for each tier, `Tell_<id>_T<n>` for each tier's tell | `frontier_kind`, `frontier_id`, `tier` |
 | `hull` | `Hull_<id>` | `frontier_kind`, `frontier_id` |
+| `npc` | `Npc_<id>` | `frontier_kind`, `frontier_id` |
 | `station_exterior` | `StationExterior_ROOT` | `frontier_kind` |
 | `station_interior` | `StationInterior_ROOT` | `frontier_kind` |
 
@@ -161,6 +163,9 @@ home, with no exposed construction sockets, separate module platforms, berths or
   facing out. Its clear opening meets the contract's minimum and is wider and taller than the
   largest hull in the catalogue with the clearance on every side, so crew ships can leave one
   after another.
+- **The rules own the mouth.** `frontier_sim`'s `station.rs` sets where the mouth is, its
+  opening, the lane's length and the footprint that no part of the hull may pass; the tool and
+  CI fail an exterior that differs, so a re-export never changes how ships dock (plan 9.4).
 - **A clear approach lane** straight out of the mouth, as wide as the opening and as long as the
   contract says, free of every exterior mesh and of every tell at its largest.
 - **Tell hardpoints belong to the sockets, not the facilities:** an empty per interior socket
@@ -196,7 +201,7 @@ remain in the library for compatibility with the pre-M9 station.
 New hulls join the starter frigate's family (style guide §3): split dorsal armour, a central
 service spine, orange bands, dark inset panels and twin drive pods, with proportions and
 equipment changed for the role. None may read as a hostile: allegiance is told by shape as well
-as colour, and hostiles are forked silhouettes.
+as colour, and hostiles have shapes of their own (below).
 
 | Hull | Silhouette |
 |---|---|
@@ -204,6 +209,10 @@ as colour, and hostiles are forked silhouettes.
 | Gunship | About the frigate's length, with forward weapon mounts, a turret on the spine and a shield emitter ring |
 
 - **Root:** `Hull_<id>`, nose along +Y.
+- **Listed in the contract:** `hulls.flown` for hulls players fly, `hulls.display` for ships
+  that are shown but never flown, docked or parked (the Aurora cruiser, about four times the
+  frigate's length). A display hull keeps every other rule; it skips the mouth and
+  parking checks below, and the station never makes room for it.
 - **Through the mouth and into its place:** each hull passes the exterior's mouth flying straight
   in, and fits its interior parking place, with the clearance on every side, weapons and
   attachments included. The manifests carry the bounds; the exterior's and interior's checks use
@@ -217,9 +226,29 @@ as colour, and hostiles are forked silhouettes.
 | Generated asset | Replaced here in |
 |---|---|
 | The six facility modules | 8.3, split into their facility files, then refined by hand at will |
-| The four-berth station | 9.2 and 9.3, by the exterior and the interior |
-| The starter frigate | 11.1, as `hulls/frigate/` |
-| The asteroids and the cruiser | Whenever they next change |
+| The four-berth station | Moved: `station/exterior/` and `station/interior/` (plan M9); the berths are gone |
+| The starter frigate | Moved: `hulls/frigate/`, a flown hull (`migrate_hulls.py`) |
+| The Aurora cruiser | Moved: `hulls/cruiser/`, a display hull (`migrate_hulls.py`) |
+| The asteroids | Whenever they next change |
 
-Hostiles (including 12.3's sentinel and stalker) are drawn by the client's readability rules and
-have no models yet.
+## NPC ships
+
+Hostile ships are their own kind, `npc`, one file per NPC ship kind in `frontier_sim`
+(`drone`, `raider`, `warden`), the identifier as the wire's `EntityKind` spells it.
+
+- **Root:** `Npc_<id>`, nose along +Y, at the ship's centre on the plane.
+- **Inside the collision circle:** every evaluated vertex lies within the kind's collision
+  radius, read from `frontier_sim`'s profiles, measured from the root on the plane. The manifest
+  records both, and CI rechecks them against today's profile, so a smaller radius needs a new
+  model. The game draws the model at that size and centres it on its height.
+- **Hostile palette:** `HostileHull`, `HostileArmor`, `Graphite` and `Ember`, so a hostile never
+  shares the player family's blue-grey armour and orange bands (style guide §3, §5).
+- **Within the npc budget** (3,000 triangles), since up to the NPC cap can fly at once.
+
+| NPC | Model |
+|---|---|
+| Raider | A crescent after SpaceNomad's Veyr frigate: keel, dorsal shell, two swept blades with forward emitters, a faceted command crystal, twin aft drives (`model_raider.py` reproduces it) |
+| Drone, warden | None yet; the client draws the forked stand-in |
+
+Hostiles without a model (including 12.3's sentinel and stalker), and the nest core, are drawn
+by the client's readability rules.

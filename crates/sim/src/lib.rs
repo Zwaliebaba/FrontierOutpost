@@ -5,7 +5,6 @@
 //! server runs it, and the browser runs its movement rules through
 //! `frontier-sim-wasm` to predict the player's own ship.
 
-pub mod berths;
 pub mod choice;
 pub mod collision;
 pub mod combat;
@@ -24,6 +23,7 @@ pub mod run;
 pub mod ship;
 pub mod site;
 pub mod skirmish;
+pub mod station;
 pub mod wingman;
 pub mod world;
 

@@ -1,10 +1,16 @@
 /**
- * The outpost as the overview shows it (design §2): the station, each installed facility on its
- * socket at the tier it owns, unpowered ones dimmed, and a ring on the selected socket. It needs
- * no WebGL, so the placement rules are tested without a renderer.
+ * The outpost as the home shows it (design §11): the station's exterior, with each installed
+ * facility's tell on its socket's hardpoint, or, once the station is selected, the interior's
+ * cutaway in its place. A facility shows outside only: the interior keeps its socket as a service
+ * location, marked with the facility's state (owner decision, 15 November 2026; design §11),
+ * closed sockets plated, a ring on the selected socket and the pilot's ship parked on the
+ * hangar deck. The same object stands at the dock in a run. It needs no WebGL, so the
+ * placement rules are tested without a renderer.
  */
 import {
   Box3,
+  BoxGeometry,
+  CylinderGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -15,20 +21,61 @@ import {
 } from "three";
 import type { Material, Object3D, Raycaster } from "three";
 import { Group } from "three";
-import type { AccountInfo, CrewInfo } from "../protocol";
+import type { AccountInfo } from "../protocol";
 import contract from "../../../Design/Art/contract.json";
+import { SHIP_HEIGHT } from "../view/hulls";
 import { stationLights } from "../view/lights";
 import { STRUCTURE_STENCIL, linear, placeShip, shipMeshes } from "../view/readability";
 import type { ShipMeshes } from "../view/readability";
 import { facilityKey } from "./models";
 import type { OutpostModels } from "./models";
-import { BERTHS, STATION_DROP } from "./placement";
+import { HOME_STATION, placeStation } from "./placement";
 import type { Placement } from "./placement";
+import type { StationView } from "./stationView";
 
 /** How far above its deck a socket's pick target sits, and how large it is, metres. */
 const PICK_LIFT = 1;
 const PICK_RADIUS = 1.9;
+/** How tall the exterior's pick target stands either side of the plane, metres. */
+const STATION_PICK_HEIGHT = 8;
 const RING = linear(1, 0.62, 0.15);
+/** A service location's state: lit as the style guide's indicators when powered, dark when not. */
+const POWERED = linear(0.04, 0.65, 1);
+const UNPOWERED = linear(0.12, 0.14, 0.17);
+const PIP_OFF = linear(0.05, 0.06, 0.08);
+const SERVICE_RADIUS = 1.15;
+
+/**
+ * The mark an installed facility leaves on its interior socket: a flat ring in its state's
+ * colour and one pip per owned tier, lit up to the tier it runs at. It stands no taller than a
+ * deck plate, so the cutaway shows the facility's state without duplicating its exterior model.
+ */
+export function serviceMarker(
+  facility: string,
+  tier: number,
+  run: number,
+  powered: boolean,
+): Object3D {
+  const marker = new Group();
+  marker.name = `Service_${facility}_T${String(tier)}`;
+  const ring = new Mesh(
+    new TorusGeometry(SERVICE_RADIUS, 0.09, 6, 40),
+    new MeshBasicMaterial({ color: powered ? POWERED : UNPOWERED, toneMapped: false }),
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.04;
+  marker.add(ring);
+  for (let n = 1; n <= tier; n += 1) {
+    const pip = new Mesh(
+      new BoxGeometry(0.28, 0.06, 0.28),
+      new MeshBasicMaterial({ color: n <= run ? POWERED : PIP_OFF, toneMapped: false }),
+    );
+    pip.name = `Service_pip_${String(n)}${n <= run ? "_lit" : ""}`;
+    pip.position.set((n - (tier + 1) / 2) * 0.42, 0.05, 0);
+    marker.add(pip);
+  }
+  return marker;
+}
 
 interface Placed {
   key: string;
@@ -38,11 +85,20 @@ interface Placed {
 }
 
 export interface SceneReport {
-  berths: { berth: string; callsign: string; you: boolean }[];
+  /** Which of the station's two views is drawn. */
+  view: StationView;
   sockets: string[];
   facilities: string[];
-  /** What is actually in the scene graph under each socket. */
+  /** The service marker under each interior socket. */
   installed: { socket: string; facility: string; tier: number; powered: boolean }[];
+  /** Facility module models under interior sockets: none, since facilities show outside. */
+  modules: number;
+  /** What stands on each exterior hardpoint. */
+  tells: { hardpoint: string; facility: string; tier: number; powered: boolean }[];
+  /** The sockets whose closure plate is shown. */
+  closed: string[];
+  /** The hulls parked on the hangar deck. */
+  parked: string[];
 }
 
 /**
@@ -74,23 +130,30 @@ function dim(object: Object3D): void {
   });
 }
 
+const FACILITY = /^Facility_([a-z][a-z0-9_]*)_T(\d+)$/;
+const SERVICE = /^Service_([a-z][a-z0-9_]*)_T(\d+)$/;
+const TELL = /^Tell_([a-z][a-z0-9_]*)_T(\d+)$/;
+
 export class OutpostScene {
   readonly scene = new Scene();
   /**
-   * The station with its facilities and, at home, the pilot's ship on the berth: placed where
-   * the run's dock is, it stands in the outpost view or in the expedition, the same object.
+   * The station, exterior and interior, placed where the run's dock is: it stands in the outpost
+   * view or in the expedition, the same object.
    */
   readonly root = new Group();
-  /** The middle of the station, which the overview orbits. */
+  /** The middle of the station on the plane, which the home view orbits. */
   readonly centre = new Vector3();
   readonly #models: OutpostModels;
   readonly #placed = new Map<string, Placed>();
+  readonly #tells = new Map<string, Placed>();
   readonly #targets = new Map<string, Mesh>();
+  readonly #station: Mesh;
   readonly #ring: Mesh;
+  readonly #parked: ShipMeshes;
   #selected: string | null = null;
-  #crewShips: ShipMeshes[] = [];
-  #roster: { berth: string; callsign: string; you: boolean }[] = [];
+  #view: StationView = "exterior";
   #atHome = true;
+  #open = new Set<string>();
   #account: AccountInfo | null = null;
   readonly #loading = new Set<string>();
   readonly #changed: () => void;
@@ -105,14 +168,23 @@ export class OutpostScene {
     this.#changed = changed;
     this.#failed = failed;
     this.scene.add(...stationLights());
-    structure(models.station);
+    structure(models.exterior);
+    structure(models.interior);
+    // Socket C opens with the reactor (plan M10); until then neither is shown.
+    for (const part of models.reactor) part.visible = false;
     this.root.name = "station";
-    this.root.add(models.station);
-    this.setCrew(null, "Pilot");
-    this.home();
-    this.place({ x: 0, z: 0, yaw: 0, y: 0, heading: 0 });
-    const target = new SphereGeometry(PICK_RADIUS, 12, 8);
+    this.root.add(models.exterior, models.interior);
     const hidden = new MeshBasicMaterial({ visible: false });
+    // Selecting the station anywhere on its ring opens the interior: one generous target.
+    const bounds = new Box3().setFromObject(models.exterior);
+    const reach = Math.max(1, -bounds.min.x, bounds.max.x, -bounds.min.z, bounds.max.z);
+    this.#station = new Mesh(
+      new CylinderGeometry(reach, reach, STATION_PICK_HEIGHT * 2, 32),
+      hidden,
+    );
+    this.#station.name = "pick:station";
+    models.exterior.add(this.#station);
+    const target = new SphereGeometry(PICK_RADIUS, 12, 8);
     for (const [id, anchor] of models.sockets) {
       const pick = new Mesh(target, hidden);
       pick.name = `pick:${id}`;
@@ -126,130 +198,135 @@ export class OutpostScene {
     );
     this.#ring.rotation.x = Math.PI / 2;
     this.#ring.visible = false;
+    // The pilot's own ship waits on its parking place, facing out of the mouth (glTF −z).
+    this.#parked = shipMeshes("self");
+    const parking = models.parking.get("frigate");
+    for (const mesh of [this.#parked.hull, this.#parked.silhouette]) {
+      mesh.name = "parked ship";
+      parking?.add(mesh);
+    }
+    placeShip(this.#parked, 0, 0, -Math.PI / 2);
+    // Its underside on the deck, as it is on the plane in flight.
+    for (const mesh of [this.#parked.hull, this.#parked.silhouette])
+      mesh.position.y = SHIP_HEIGHT / 2;
+    this.home();
+    this.place(placeStation(HOME_STATION));
+    this.#show();
+  }
+
+  /** Draws `view` of the station in place of the other; in a run only the exterior stands. */
+  setView(view: StationView): void {
+    this.#view = view;
+    this.#show();
+  }
+
+  get view(): StationView {
+    return this.#view;
+  }
+
+  #show(): void {
+    const inside = this.#atHome && this.#view === "interior";
+    this.#models.exterior.visible = !inside;
+    this.#models.interior.visible = inside;
     this.scene.updateMatrixWorld(true);
   }
 
-  /** Roster ships are presentation at each pilot's own home, never shared inventory. */
-  setCrew(crew: CrewInfo | null, callsign: string): void {
-    const roster = crew?.members ?? [{ callsign, you: true, share: 100, berth: 0 }];
-    const next = roster.slice(0, BERTHS.length).map((member, index) => ({
-      berth: BERTHS[member.berth ?? index]?.id ?? "07",
-      callsign: member.callsign,
-      you: member.you,
-    }));
-    if (JSON.stringify(next) === JSON.stringify(this.#roster)) return;
-    for (const ship of this.#crewShips) {
-      ship.hull.removeFromParent();
-      ship.silhouette.removeFromParent();
-      ship.dispose();
-    }
-    this.#roster = next;
-    this.#crewShips = next.map((member) => {
-      const berth = BERTHS.find((b) => b.id === member.berth);
-      const ship = shipMeshes(member.you ? "self" : "ally");
-      if (!berth) return ship;
-      placeShip(ship, berth.x, berth.z, Math.PI / 2);
-      for (const mesh of [ship.hull, ship.silhouette]) {
-        mesh.position.y += STATION_DROP;
-        mesh.name = "berth ship";
-        mesh.userData.callsign = member.callsign;
-        mesh.visible = this.#atHome;
-        this.root.add(mesh);
-      }
-      return ship;
-    });
-    this.root.updateMatrixWorld(true);
-  }
-
-  /** Shows each socket as `account` has it: the module at its owned tier, dimmed if unpowered. */
+  /**
+   * Shows each socket as `account` has it: its tell on the socket's hardpoint outside, growing
+   * with the tier and dimmed if unpowered, and its service marker on the socket inside.
+   */
   apply(account: AccountInfo): void {
     this.#account = account;
+    this.#open = new Set(account.outpost.sockets.filter((s) => s.open).map((s) => s.id));
+    for (const [id, closure] of this.#models.closures) closure.visible = !this.#open.has(id);
     for (const socket of account.outpost.sockets) {
       const anchor = this.#models.sockets.get(socket.id);
       if (!anchor) continue;
-      anchor.traverse((node) => {
-        if (node.name.startsWith("SocketClosure_")) node.visible = !socket.open;
-      });
-      const current = this.#placed.get(socket.id);
       const tier =
         account.outpost.unlocks.find((unlock) => unlock.facility === socket.facility)?.tier ?? 0;
       const key = socket.facility === undefined ? null : facilityKey(socket.facility, tier);
       const powered = socket.run > 0;
+      const current = this.#placed.get(socket.id);
       if (
         current &&
         current.key === key &&
         current.powered === powered &&
-        current.run === socket.run
+        current.run === socket.run &&
+        (this.#tells.has(socket.id) || !this.#models.hardpoints.has(socket.id))
       )
         continue;
-      if (current) {
-        anchor.remove(current.object);
-        this.#placed.delete(socket.id);
-      }
+      this.#clear(socket.id);
+      // The facility's file holds its tells; the marker waits for it, so both appear together.
       const template = key === null ? undefined : this.#models.facilities.get(key);
-      if (
-        key &&
-        !template &&
-        socket.facility &&
-        this.#models.loadFacility &&
-        !this.#loading.has(socket.facility)
-      ) {
-        const id = socket.facility;
-        this.#loading.add(id);
-        void this.#models
-          .loadFacility(id)
-          .then(() => {
-            this.#loading.delete(id);
-            if (this.#account) this.apply(this.#account);
-            this.#changed();
-          })
-          .catch((error: unknown) => {
-            this.#loading.delete(id);
-            this.#failed(error);
-          });
-      }
-      if (!key || !template) continue;
-      const object = template.clone();
-      object.position.set(0, 0, 0);
-      object.traverse((node) => {
-        const match = /^Operating_Tier_(\d+)/.exec(node.name);
-        if (match?.[1]) node.visible = Number(match[1]) <= socket.run;
-      });
-      if (!powered) dim(object);
-      structure(object);
+      if (key && !template && socket.facility) this.#load(socket.facility);
+      if (!key || !template || !socket.facility) continue;
+      const object = serviceMarker(socket.facility, tier, socket.run, powered);
       anchor.add(object);
       this.#placed.set(socket.id, { key, powered, run: socket.run, object });
+      const hardpoint = this.#models.hardpoints.get(socket.id);
+      const tell = this.#models.tells.get(key)?.clone();
+      if (hardpoint && tell) {
+        tell.position.set(0, 0, 0);
+        if (!powered) dim(tell);
+        structure(tell);
+        hardpoint.add(tell);
+        this.#tells.set(socket.id, { key, powered, run: socket.run, object: tell });
+      }
     }
     this.scene.updateMatrixWorld(true);
   }
 
-  /** Stands the station where a run's dock puts it (`placeStation`). */
+  /** Takes the service marker and the tell off socket `id`. */
+  #clear(id: string): void {
+    this.#placed.get(id)?.object.removeFromParent();
+    this.#placed.delete(id);
+    this.#tells.get(id)?.object.removeFromParent();
+    this.#tells.delete(id);
+  }
+
+  /** Fetches a facility's file, then shows the account again with its models in. */
+  #load(id: string): void {
+    if (!this.#models.loadFacility || this.#loading.has(id)) return;
+    this.#loading.add(id);
+    void this.#models
+      .loadFacility(id)
+      .then(() => {
+        this.#loading.delete(id);
+        if (this.#account) this.apply(this.#account);
+        this.#changed();
+      })
+      .catch((error: unknown) => {
+        this.#loading.delete(id);
+        this.#failed(error);
+      });
+  }
+
+  /** Stands the station where the rules put it (`placeStation`). */
   place(placement: Placement): void {
     this.root.position.set(placement.x, placement.y, placement.z);
     this.root.rotation.set(0, placement.yaw, 0);
     this.root.updateMatrixWorld(true);
-    new Box3().setFromObject(this.#models.station).getCenter(this.centre);
-    this.centre.y = 0;
+    this.centre.set(placement.x, 0, placement.z);
   }
 
-  /** Brings the station home to the outpost view, with the ship back on its berth. */
+  /** Brings the station home to the outpost view, the pilot's ship parked inside. */
   home(): void {
     this.scene.add(this.root);
     this.#atHome = true;
-    for (const ship of this.#crewShips) {
-      ship.hull.visible = true;
-      ship.silhouette.visible = true;
-    }
-    this.scene.updateMatrixWorld(true);
+    this.#parked.hull.visible = true;
+    this.#parked.silhouette.visible = true;
+    this.#show();
   }
 
-  /** The station leaves for a run: the ship flies from the berth, drawn from snapshots. */
+  /**
+   * The station leaves for a run: only the exterior stands at the dock, and the ship flies from
+   * the hangar, drawn from snapshots.
+   */
   launch(): Object3D {
     this.#atHome = false;
-    for (const ship of this.#crewShips) {
-      ship.hull.visible = false;
-      ship.silhouette.visible = false;
-    }
+    this.#parked.hull.visible = false;
+    this.#parked.silhouette.visible = false;
+    this.#show();
     return this.root;
   }
 
@@ -268,10 +345,18 @@ export class OutpostScene {
     return this.#selected;
   }
 
-  /** The socket under a ray from the camera, if any. */
+  /** The open socket under a ray from the camera, if any, while the interior is drawn. */
   pick(raycaster: Raycaster): string | null {
-    const [hit] = raycaster.intersectObjects([...this.#targets.values()], false);
+    if (this.#view !== "interior" || !this.#atHome) return null;
+    const open = [...this.#targets].filter(([id]) => this.#open.has(id)).map(([, pick]) => pick);
+    const [hit] = raycaster.intersectObjects(open, false);
     return hit ? hit.object.name.slice("pick:".length) : null;
+  }
+
+  /** Whether a ray from the camera meets the station, while its exterior is drawn. */
+  pickStation(raycaster: Raycaster): boolean {
+    if (this.#view !== "exterior" || !this.#atHome) return false;
+    return raycaster.intersectObject(this.#station, false).length > 0;
   }
 
   /** Where a socket's anchor is, for labels. */
@@ -282,9 +367,13 @@ export class OutpostScene {
   /** What the scene graph holds, for tests and the page's diagnostics. */
   report(): SceneReport {
     const installed: SceneReport["installed"] = [];
+    let modules = 0;
     for (const [socket, anchor] of this.#models.sockets) {
+      anchor.traverse((node) => {
+        if (FACILITY.test(node.name)) modules += 1;
+      });
       for (const child of anchor.children) {
-        const match = /^Facility_([a-z][a-z0-9_]*)_T(\d+)$/.exec(child.name);
+        const match = SERVICE.exec(child.name);
         if (!match?.[1] || !match[2]) continue;
         installed.push({
           socket,
@@ -294,11 +383,36 @@ export class OutpostScene {
         });
       }
     }
+    const tells: SceneReport["tells"] = [];
+    for (const [hardpoint, anchor] of this.#models.hardpoints) {
+      for (const child of anchor.children) {
+        const match = TELL.exec(child.name);
+        if (!match?.[1] || !match[2]) continue;
+        tells.push({
+          hardpoint,
+          facility: match[1],
+          tier: Number(match[2]),
+          powered: this.#tells.get(hardpoint)?.powered ?? false,
+        });
+      }
+    }
+    const parked: string[] = [];
+    for (const [hull, anchor] of this.#models.parking) {
+      if (anchor.children.some((child) => child.name === "parked ship" && child.visible))
+        parked.push(hull);
+    }
     return {
-      berths: this.#roster,
+      view: this.#atHome ? this.#view : "exterior",
       sockets: [...this.#models.sockets.keys()].sort(),
       facilities: [...this.#models.facilities.keys()].sort(),
       installed,
+      modules,
+      tells,
+      closed: [...this.#models.closures]
+        .filter(([, closure]) => closure.visible)
+        .map(([id]) => id)
+        .sort(),
+      parked,
     };
   }
 }

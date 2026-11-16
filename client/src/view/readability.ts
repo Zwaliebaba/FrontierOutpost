@@ -130,11 +130,16 @@ interface Templates {
 
 let templates: Templates | null = null;
 
+/** Hostile models by NPC kind (`raider`); a kind without one keeps the forked stand-in. */
+const npcTemplates = new Map<string, { hull: Object3D; silhouette: Object3D }>();
+
 /**
  * How far an ally's armour moves toward the ally blue: shape says player side, colour says you
  * or your crew, as the stand-in hulls' tones did.
  */
 const ALLY_TINT = 0.55;
+/** The armour roles (Design/Art/contract.json) an ally's hull tints: both plate tones. */
+const ALLY_TINTED: ReadonlySet<string> = new Set(["Armor", "Titanium"]);
 
 function meshesOf(object: Object3D): Mesh[] {
   const meshes: Mesh[] = [];
@@ -145,7 +150,7 @@ function meshesOf(object: Object3D): Mesh[] {
 }
 
 /** `model` drawn as `allegiance`'s hull: its own materials, the ally's armour tinted. */
-function hullTemplate(model: Object3D, allegiance: "self" | "ally"): Object3D {
+function hullTemplate(model: Object3D, allegiance: Allegiance): Object3D {
   const template = model.clone();
   const copies = new Map<Material, Material>();
   for (const mesh of meshesOf(template)) {
@@ -156,7 +161,7 @@ function hullTemplate(model: Object3D, allegiance: "self" | "ally"): Object3D {
         copy = original.clone();
         Object.assign(copy, HULL_STENCIL);
         if (allegiance === "ally" && copy instanceof MeshStandardMaterial) {
-          if (copy.name.startsWith("Armor")) copy.color.lerp(SIGNAL.ally, ALLY_TINT);
+          if (ALLY_TINTED.has(copy.name)) copy.color.lerp(SIGNAL.ally, ALLY_TINT);
         }
         copies.set(original, copy);
       }
@@ -168,7 +173,7 @@ function hullTemplate(model: Object3D, allegiance: "self" | "ally"): Object3D {
 }
 
 /** `model` drawn as `allegiance`'s silhouette: every part in the signal colour. */
-function silhouetteTemplate(model: Object3D, allegiance: "self" | "ally"): Object3D {
+function silhouetteTemplate(model: Object3D, allegiance: Allegiance): Object3D {
   const template = model.clone();
   const material = silhouetteMaterial(allegiance);
   for (const mesh of meshesOf(template)) {
@@ -197,14 +202,42 @@ export function usesShipModel(): boolean {
   return templates !== null;
 }
 
-export function shipMeshes(allegiance: Allegiance, scale = 1): ShipMeshes {
+/**
+ * Draws hostiles of NPC kind `npc` as `model` (view/npc) from now on, or as the forked stand-in
+ * again for `null`. The model keeps its own materials: its hostile palette and its shape both
+ * say hostile, as the stand-in's colour and fork did. Ships already drawn keep their hulls.
+ */
+export function useNpcModel(npc: string, model: Object3D | null): void {
+  if (model) {
+    npcTemplates.set(npc, {
+      hull: hullTemplate(model, "hostile"),
+      silhouette: silhouetteTemplate(model, "hostile"),
+    });
+  } else {
+    npcTemplates.delete(npc);
+  }
+}
+
+/**
+ * A ship as drawn for `allegiance`, `scale` times the starter hull. `npc` names the NPC kind
+ * of a hostile, so a kind with a model (useNpcModel) is drawn as that model.
+ */
+export function shipMeshes(allegiance: Allegiance, scale = 1, npc?: string): ShipMeshes {
   let ship: ShipMeshes;
-  if (templates && allegiance !== "hostile") {
+  const npcTemplate = allegiance === "hostile" && npc !== undefined && npcTemplates.get(npc);
+  if (npcTemplate) {
+    ship = {
+      hull: npcTemplate.hull.clone(),
+      silhouette: npcTemplate.silhouette.clone(),
+      gear: [],
+      dispose: () => {},
+    };
+  } else if (templates && allegiance !== "hostile") {
     const hull = templates.hull[allegiance].clone();
     const silhouette = templates.silhouette[allegiance].clone();
     ship = { hull, silhouette, gear: [...gearOf(hull), ...gearOf(silhouette)], dispose: () => {} };
   } else {
-    // Hostiles keep the forked stand-in: there is no hostile model yet.
+    // Hostiles without a model of their own keep the forked stand-in.
     const geometry = hullGeometry(allegiance);
     const hullMaterialOwn = hullMaterial(allegiance);
     const silhouetteMaterialOwn = silhouetteMaterial(allegiance);

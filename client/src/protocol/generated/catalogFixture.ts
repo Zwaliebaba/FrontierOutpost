@@ -15,7 +15,7 @@ export const CATALOG: Catalog = {
     {
       "id": "b",
       "name": "Socket B",
-      "beside": "berth"
+      "beside": "hangar deck"
     }
   ],
   "facilities": [

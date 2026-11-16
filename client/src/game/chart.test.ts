@@ -24,7 +24,19 @@ const site: SiteInfo = {
   centreX: 70,
   centreZ: 0,
   radius: 125,
-  dockRadius: 12,
+  station: {
+    centreX: -120,
+    centreZ: 0,
+    forwardX: 1,
+    forwardZ: 0,
+    mouthX: -106,
+    mouthZ: 0,
+    laneLength: 30,
+    captureDepth: 8,
+    mouthWidth: 8,
+    footprintRadius: 17,
+    obstacles: [],
+  },
   pockets: [
     { kind: "oreField", x: 45, z: -10, radius: 36, locked: false, material: "ore" },
     { kind: "derelict", x: 115, z: 65, radius: 24, locked: true, material: "salvage" },
@@ -71,7 +83,7 @@ describe("fitChart and plot", () => {
   it("shows the dock, the site and every pocket inside the padding", () => {
     const frame = fitChart(site, 800, 600, 40);
     const edges = [
-      { x: site.dockX, z: site.dockZ, radius: site.dockRadius },
+      { x: site.dockX, z: site.dockZ, radius: site.station.footprintRadius },
       { x: site.centreX, z: site.centreZ, radius: site.radius },
       ...site.pockets,
     ];
@@ -102,7 +114,7 @@ describe("fitChart and plot", () => {
     const frame = fitChart(site, 800, 600, 40);
     // The least room left at any edge is none: a larger scale would overflow the padding.
     const slack = [
-      { x: site.dockX, z: site.dockZ, radius: site.dockRadius },
+      { x: site.dockX, z: site.dockZ, radius: site.station.footprintRadius },
       { x: site.centreX, z: site.centreZ, radius: site.radius },
     ].flatMap((circle) => {
       const at = plot(frame, circle.x, circle.z);
@@ -162,8 +174,10 @@ describe("chartPlaces", () => {
   it("warns that a laden jump home arrives short of the dock", () => {
     const empty = chartPlaces(site, { x: 0, z: 0 }, null, false)[0];
     const laden = chartPlaces(site, { x: 0, z: 0 }, null, true)[0];
-    expect(empty?.arrival).toContain("docking is flown");
+    expect(empty?.arrival).toBe("Off the hangar mouth, facing it: docking is flown");
     expect(laden?.arrival).toContain("interceptors");
+    // No berths: the station is docked through its mouth.
+    expect(empty?.status).toBe("Home station · banks the hold");
   });
 });
 
@@ -209,10 +223,14 @@ describe("jumpReadiness", () => {
     expect(jumpReadiness(ore ?? null, "extracting").reason).toContain("(X)");
   });
 
-  it("waits for the ship to fly clear of the dock, as the server does", () => {
+  it("waits while the hangar flies the ship out or in, as the server does", () => {
     expect(jumpReadiness(ore ?? null, "ready", "atDock")).toEqual({
       ready: false,
-      reason: "Fly clear of the dock first",
+      reason: "Not while leaving the hangar",
+    });
+    expect(jumpReadiness(ore ?? null, "ready", "docking")).toEqual({
+      ready: false,
+      reason: "Not while the hangar draws the ship in",
     });
     expect(jumpReadiness(ore ?? null, "ready", "approach").ready).toBe(true);
     // The dock itself is the server's to refuse: the ship is already there.

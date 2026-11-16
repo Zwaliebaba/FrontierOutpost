@@ -19,16 +19,23 @@ import {
   Vector3,
 } from "three";
 import type { Color, Material as ThreeMaterial, Object3D } from "three";
-import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "../protocol";
-import { berthPositions } from "../outpost/placement";
+import type {
+  DepositInfo,
+  EntityKind,
+  Material,
+  ObstacleInfo,
+  SiteInfo,
+  StationInfo,
+} from "../protocol";
 import type { EntityPose } from "../net/interpolation";
 import { ExtractorBeam } from "./extractorBeam";
 import type { JumpEffects } from "./jumpEffects";
 import { JumpVisuals } from "./jumpVisuals";
+import { insideHangar } from "./hangar";
 import type { Shots } from "./shots";
-import { SHIP_HEIGHT } from "../view/hulls";
+import { SHIP_HEIGHT, SHIP_LENGTH } from "../view/hulls";
 import { stepBank } from "../view/bank";
-import { setGear, stepGear } from "../view/frigate";
+import { setGear } from "../view/frigate";
 import { stationLights } from "../view/lights";
 import { between, createRng } from "../view/rng";
 import {
@@ -128,15 +135,10 @@ interface DrawnShip extends ShipMeshes {
   feedback: FeedbackMaterial[];
   allegiance: Allegiance;
   kind: EntityKind;
-  /** The landing gear, 0 folded to 1 lowered. */
-  lowered: number;
   /** The heading it was last drawn at, and its lean into the turn (view/bank). */
   heading: number;
   bank: number;
 }
-
-/** A ship this close to the dock is on berth 07, so its gear is down, metres. */
-export const ON_BERTH = 1.2;
 
 export class ExpeditionScene {
   readonly scene = new Scene();
@@ -158,7 +160,8 @@ export class ExpeditionScene {
   /** The extractor's beam from the player's ship to the deposit it works; one at a time. */
   readonly #extractor = new ExtractorBeam();
   #station: Object3D | null = null;
-  #berths: { x: number; z: number }[] = [];
+  /** The station at the run's dock, whose hangar hides the ships inside it. */
+  #hangar: StationInfo | null = null;
   #ownShipId: number;
   #feedback = true;
   #shield = 0;
@@ -267,6 +270,19 @@ export class ExpeditionScene {
     return this.#ships.get(id);
   }
 
+  /** Whether the ship is drawn: it is not while inside the hangar. */
+  drawn(id: number): boolean {
+    return this.#ships.get(id)?.hull.visible ?? false;
+  }
+
+  /** The ships inside the hangar, so not drawn, by id. */
+  get inHangar(): number[] {
+    return [...this.#ships]
+      .filter(([, drawn]) => !drawn.hull.visible)
+      .map(([id]) => id)
+      .sort((a, b) => a - b);
+  }
+
   get bracket(): Group {
     return this.#bracket;
   }
@@ -277,7 +293,7 @@ export class ExpeditionScene {
 
   /**
    * Moves every ship to its pose, brackets the locked one, and draws the shots and the jumps.
-   * `dt`, seconds since the last update, paces the landing gear.
+   * `dt`, seconds since the last update, paces the hit flashes and the banking.
    */
   update(
     poses: readonly EntityPose[],
@@ -297,13 +313,8 @@ export class ExpeditionScene {
         this.#remove(pose.id, drawn);
         drawn = undefined;
       }
-      // Gear is down only on the berth: it folds as a launching ship lifts off.
-      const berthed = this.#berths.some(
-        (berth) => Math.hypot(pose.x - berth.x, pose.z - berth.z) <= ON_BERTH,
-      );
-      const target = berthed ? 1 : 0;
       if (!drawn) {
-        const meshes = shipMeshes(allegiance, SIZE[pose.kind]);
+        const meshes = shipMeshes(allegiance, SIZE[pose.kind], pose.kind);
         if (pose.kind === "wingman") {
           // A double ring distinguishes the NPC ally even when its hull is silhouetted.
           const badge = new Group();
@@ -324,14 +335,15 @@ export class ExpeditionScene {
           feedback: feedbackMaterials(meshes.hull),
           allegiance,
           kind: pose.kind,
-          lowered: target,
           heading: pose.heading,
           bank: 0,
         };
+        // Ships take off and land nowhere: they leave and enter the hangar flying, so the gear
+        // stays folded in flight (style guide §3). Only the interior's parked ship lowers it.
+        setGear(drawn.gear, 0);
         this.#ships.set(pose.id, drawn);
         this.scene.add(drawn.hull, drawn.silhouette);
       } else {
-        drawn.lowered = stepGear(drawn.lowered, target, dt);
         // Structures never move; everything that flies leans into its turns.
         if (pose.kind !== "core")
           drawn.bank = stepBank(drawn.bank, drawn.heading, pose.heading, dt);
@@ -348,8 +360,14 @@ export class ExpeditionScene {
         signal.material.emissiveIntensity = signal.intensity + strength * 0.55;
       }
       drawn.hit = Math.max(0, drawn.hit - dt);
-      setGear(drawn.gear, drawn.lowered);
       placeShip(drawn, pose.x, pose.z, pose.heading, drawn.bank);
+      // Inside the hangar, as a launch waits to leave or a docking ship is drawn in, it is under
+      // the station's roof: neither it nor its silhouette nor its badge is drawn (game/hangar).
+      const shown =
+        this.#hangar === null ||
+        !insideHangar(this.#hangar, pose.x, pose.z, SHIP_LENGTH * SIZE[pose.kind]);
+      drawn.hull.visible = shown;
+      drawn.silhouette.visible = shown;
       // A jumping hull draws out along its length, +x, and thins to match: presentation only.
       const stretch = jumps && this.#feedback ? jumps.stretch(pose.id) : 1;
       for (const mesh of [drawn.hull, drawn.silhouette]) {
@@ -365,7 +383,7 @@ export class ExpeditionScene {
     }
 
     const locked = lock === null ? undefined : this.#ships.get(lock);
-    this.#bracket.visible = locked !== undefined;
+    this.#bracket.visible = locked !== undefined && locked.hull.visible;
     if (locked) {
       // Square to the world, not the hull, so the bracket holds still while its target turns.
       this.#bracket.position.copy(locked.hull.position);
@@ -454,10 +472,7 @@ export class ExpeditionScene {
    */
   setSite(site: SiteInfo, obstacles: readonly ObstacleInfo[], deposits: readonly DepositInfo[]) {
     this.#clearSite();
-    this.#berths = berthPositions(
-      { x: site.dockX, z: site.dockZ },
-      { x: site.centreX, z: site.centreZ },
-    );
+    this.#hangar = site.station;
     const rng = createRng(LANDMARK_SEED);
     const rockMaterial = new MeshStandardMaterial({
       color: linear(0.1, 0.12, 0.15),
@@ -534,7 +549,7 @@ export class ExpeditionScene {
   }
 }
 
-/** The pilots' home berth: a hub and a docking ring, drawn as a structure. */
+/** The station's stand-in while its models load: a hub and a ring, drawn as a structure. */
 function station(x: number, z: number): Group {
   const material = new MeshStandardMaterial({
     color: STATION,

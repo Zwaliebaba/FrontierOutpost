@@ -1,8 +1,9 @@
 /**
- * The starter frigate from Design/FrontierOutpost (frigate.glb), set up as the game draws hulls
+ * The starter frigate from the art pipeline (Design/Art/hulls/frigate), set up as the game draws hulls
  * (view/hulls): nose along +x, centred on its footprint, its landing feet at the hull's underside
- * so it rests on berth 07 where the stand-in wedge did. Its landing gear folds up into the keel
- * in flight (style guide §3); the model has no gear bays yet, so the legs slide up out of sight.
+ * so it rests on the hangar deck. Its landing gear folds up into the keel in flight (style guide
+ * §3), and is lowered only parked on the deck; the model has no gear bays yet, so folded legs slide
+ * up out of sight.
  */
 import { Box3, Group, Vector3 } from "three";
 import type { Object3D } from "three";
@@ -14,21 +15,19 @@ const GEAR_NODE = /landing_(strut|foot)/;
 export const GEAR_LIFT = 0.3;
 /** How much smaller folded legs are, so a foot does not show beside the keel. */
 const GEAR_FOLDED_SCALE = 0.6;
-/** How long the gear takes to fold or lower, seconds. */
-export const GEAR_SECONDS = 0.6;
 
 export class FrigateError extends Error {
   override name = "FrigateError";
 }
 
 /**
- * The frigate from frigate.glb's scene, wrapped so that its outer group takes the ship's place
- * and heading as the stand-in hulls do: the generator faces it +Y in Blender, which is -Z in
- * glTF, and leaves it where it stands on the berth.
+ * The frigate under `rootName` in its GLB's scene, wrapped so that its outer group takes the
+ * ship's place and heading as the stand-in hulls do: hulls face +Y in Blender, which is -Z in
+ * glTF, and stand on their landing feet below the root.
  */
-export function frigateModel(scene: Object3D): Object3D {
-  const root = scene.getObjectByName("Frigate_ROOT");
-  if (!root) throw new FrigateError("frigate.glb has no Frigate_ROOT");
+export function frigateModel(scene: Object3D, rootName = "Hull_frigate"): Object3D {
+  const root = scene.getObjectByName(rootName);
+  if (!root) throw new FrigateError(`the frigate's GLB has no ${rootName}`);
   root.removeFromParent();
   root.position.set(0, 0, 0);
   // Turns glTF -Z, the nose, to +x.
@@ -64,10 +63,4 @@ export function setGear(legs: readonly Object3D[], lowered: number): void {
     leg.position.y = deployedY + (1 - eased) * GEAR_LIFT;
     leg.scale.setScalar(GEAR_FOLDED_SCALE + (1 - GEAR_FOLDED_SCALE) * eased);
   }
-}
-
-/** Moves `lowered` toward `target` (0 or 1) at the gear's pace, over `dt` seconds. */
-export function stepGear(lowered: number, target: number, dt: number): number {
-  const step = dt / GEAR_SECONDS;
-  return target > lowered ? Math.min(target, lowered + step) : Math.max(target, lowered - step);
 }

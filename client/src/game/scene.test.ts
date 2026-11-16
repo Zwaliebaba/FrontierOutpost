@@ -4,7 +4,7 @@ import { ExpeditionScene, SIZE, allegianceOf } from "./scene";
 import { FLASH_SECONDS, JumpEffects } from "./jumpEffects";
 import type { EntityPose } from "../net/interpolation";
 import type { SiteInfo } from "../protocol";
-import { GEAR_LIFT, GEAR_SECONDS } from "../view/frigate";
+import { GEAR_LIFT } from "../view/frigate";
 import { SHIP_HEIGHT } from "../view/hulls";
 import { RENDER_HEIGHT, STRUCTURE, hullGeometry, useShipModel } from "../view/readability";
 
@@ -31,7 +31,19 @@ const SITE: SiteInfo = {
   centreX: 70,
   centreZ: 0,
   radius: 125,
-  dockRadius: 15,
+  station: {
+    centreX: -120,
+    centreZ: 0,
+    forwardX: 1,
+    forwardZ: 0,
+    mouthX: -106,
+    mouthZ: 0,
+    laneLength: 30,
+    captureDepth: 8,
+    mouthWidth: 8,
+    footprintRadius: 17,
+    obstacles: [],
+  },
   pockets: [
     { kind: "oreField", x: 45, z: -10, radius: 36, locked: false, material: "ore" },
     { kind: "derelict", x: 115, z: 65, radius: 24, locked: true, material: "salvage" },
@@ -235,32 +247,55 @@ describe("ExpeditionScene", () => {
     expect(world.ship(3)?.hull.scale.x).toBe(SIZE.warden);
   });
 
-  it("lowers a player ship's gear on the berth and folds it once the ship lifts off", () => {
+  it("keeps a player ship's gear folded in flight, leaving the hangar and out on the lane", () => {
     useShipModel(model());
     const world = new ExpeditionScene(1);
     world.setSite(SITE, [], []);
-    const leg = () => {
+    const leg = (id: number) => {
       let y = Number.NaN;
-      world.ship(1)?.hull.traverse((node) => {
+      world.ship(id)?.hull.traverse((node) => {
         if (node.name.includes("landing_strut")) y = node.position.y;
       });
       return y;
     };
-    world.update([pose(1, "playerShip", SITE.dockX, SITE.dockZ + 6)], null, undefined, 0.1);
-    expect(leg()).toBeCloseTo(-0.4, 6);
-    // Off the berth the legs fold over the gear's time, not at once.
-    world.update([pose(1, "playerShip", SITE.dockX + 3, 0)], null, undefined, GEAR_SECONDS / 2);
-    expect(leg()).toBeGreaterThan(-0.4);
-    expect(leg()).toBeLessThan(-0.4 + GEAR_LIFT);
-    world.update([pose(1, "playerShip", SITE.dockX + 6, 0)], null, undefined, GEAR_SECONDS);
-    expect(leg()).toBeCloseTo(-0.4 + GEAR_LIFT, 6);
-    // A ship first seen in flight is drawn with its gear up.
-    world.update([pose(2, "playerShip", 40, 0)], null, undefined, 0.016);
-    let folded = Number.NaN;
-    world.ship(2)?.hull.traverse((node) => {
-      if (node.name.includes("landing_strut")) folded = node.position.y;
-    });
-    expect(folded).toBeCloseTo(-0.4 + GEAR_LIFT, 6);
+    // At the mouth, on its way out, and far off: no berth lowers the legs any more.
+    world.update(
+      [pose(1, "playerShip", SITE.station.mouthX, 0), pose(2, "playerShip", 40, 0)],
+      null,
+      undefined,
+      0.1,
+    );
+    expect(leg(1)).toBeCloseTo(-0.4 + GEAR_LIFT, 6);
+    expect(leg(2)).toBeCloseTo(-0.4 + GEAR_LIFT, 6);
+  });
+
+  it("draws no ship inside the hangar, nor its silhouette or lock, until it reaches the mouth", () => {
+    useShipModel(model());
+    const world = new ExpeditionScene(1);
+    world.setSite(SITE, [], []);
+    // The departure queue at the hangar's start, 8 m out from the centre: all on one spot.
+    const start = SITE.station.centreX + 8;
+    const queue = [1, 2, 3, 4].map((id) => pose(id, id === 4 ? "wingman" : "playerShip", start));
+    world.update(queue, 2);
+    for (const ship of queue) {
+      expect(world.ship(ship.id)?.hull.visible).toBe(false);
+      expect(world.ship(ship.id)?.silhouette.visible).toBe(false);
+    }
+    expect(world.bracket.visible).toBe(false);
+    expect(world.inHangar).toEqual([1, 2, 3, 4]);
+    expect(world.drawn(2)).toBe(false);
+    // The first out of the mouth is drawn, its silhouette and lock with it; the rest still wait.
+    world.update([{ ...pose(1, "playerShip", SITE.station.mouthX), id: 2 }, ...queue.slice(2)], 2);
+    expect(world.ship(2)?.hull.visible).toBe(true);
+    expect(world.ship(2)?.silhouette.visible).toBe(true);
+    expect(world.bracket.visible).toBe(true);
+    expect(world.ship(3)?.hull.visible).toBe(false);
+    expect(world.drawn(2)).toBe(true);
+    expect(world.inHangar).toEqual([3, 4]);
+    // Before a run's site is known nothing is hidden.
+    const bare = new ExpeditionScene(1);
+    bare.update([pose(1, "playerShip", start)], null);
+    expect(bare.ship(1)?.hull.visible).toBe(true);
   });
 
   it("draws ships in flight anew once the hull model loads", () => {
@@ -354,17 +389,6 @@ describe("ExpeditionScene", () => {
     scene.update([pose(2, "playerShip", 0, 300)], null, undefined, 0, jumps);
     expect(scene.jumpFlashes).toHaveLength(0);
   });
-});
-
-it("recognizes each authored berth and does not lower gear at the apron centre", () => {
-  useShipModel(model());
-  const world = new ExpeditionScene(0);
-  world.setSite(SITE, [], []);
-  const ships = [6, 2, -2, -6].map((z, id) => pose(id, "playerShip", SITE.dockX, z));
-  world.update(ships, null, undefined, 0.1);
-  for (const ship of ships) expect(world.ship(ship.id)?.lowered).toBe(1);
-  world.update([pose(4, "playerShip", SITE.dockX, 0)], null, undefined, 0.1);
-  expect(world.ship(4)?.lowered).toBe(0);
 });
 
 it("confirms hull and own-shield loss without flashing another ship or a new contact", () => {

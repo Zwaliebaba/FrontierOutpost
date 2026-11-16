@@ -79,11 +79,66 @@ export async function launch(page: Page, url = "/"): Promise<void> {
   await page.locator("#hud[data-x]").waitFor();
 }
 
-/** Flies off the berth until the run counts the ship undocked: a jump is made from open space. */
-export async function flyClear(page: Page): Promise<void> {
-  await page.keyboard.down("KeyW");
+/**
+ * Waits for the launch to fly the ship out of the hangar and hand it over at the lane's end,
+ * where the run counts it undocked: a jump is made from open space, and the pilot's keys do
+ * nothing before then. The ship keeps the launch's speed, out along +x on the compact site.
+ */
+export async function leaveHangar(page: Page): Promise<void> {
   await page.locator('#run[data-phase="approach"]').waitFor({ timeout: 20_000 });
+}
+
+/** Out of the hangar, brakes until the ship is all but still. */
+export async function leaveHangarAndStop(page: Page): Promise<void> {
+  await leaveHangar(page);
+  await page.keyboard.down("KeyS");
+  await page.waitForTimeout(3_000);
+  await page.keyboard.up("KeyS");
+}
+
+/**
+ * From a ship stopped facing out along the lane, as `leaveHangarAndStop` leaves it, turns about
+ * and flies straight back into the hangar mouth, which captures it and draws it in to dock.
+ */
+export async function flyBackIntoTheMouth(page: Page): Promise<void> {
+  // 2.4 rad/s: half a turn in about 1.3 seconds.
+  await page.keyboard.down("KeyA");
+  await page.waitForTimeout(1_310);
+  await page.keyboard.up("KeyA");
+  await page.keyboard.down("KeyW");
+  await page.locator("#summary[data-ending]").waitFor({ timeout: 20_000 });
   await page.keyboard.up("KeyW");
+}
+
+/**
+ * Records every phase the run status shows, in order, on the page itself, so a phase as short
+ * as the draw-in's second is not missed between polls. Read it with `phasesSeen`.
+ */
+export async function watchPhases(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    const hangar: string[] = [];
+    Object.assign(window, { phasesSeen: seen, hangarSeen: hangar });
+    const run = document.querySelector<HTMLElement>("#run");
+    const hud = document.querySelector<HTMLElement>("#hud");
+    const record = () => {
+      const phase = run?.dataset.phase;
+      if (phase && seen.at(-1) !== phase) seen.push(phase);
+      const inHangar = hud?.dataset.inHangar ?? "";
+      if (hangar.at(-1) !== inHangar) hangar.push(inHangar);
+    };
+    for (const node of [run, hud]) {
+      if (node) new MutationObserver(record).observe(node, { attributes: true });
+    }
+  });
+}
+
+/** The phases `watchPhases` saw, and each list of ships the hangar hid, in order. */
+export async function phasesSeen(page: Page): Promise<{ phases: string[]; hangar: string[] }> {
+  return page.evaluate(() => {
+    const seen = window as unknown as { phasesSeen?: string[]; hangarSeen?: string[] };
+    return { phases: seen.phasesSeen ?? [], hangar: seen.hangarSeen ?? [] };
+  });
 }
 
 /** Flies straight out of the dock until the ship is inside the ore field. */

@@ -825,6 +825,42 @@ body[data-station="dock"] #messages {
   inset: 0;
   pointer-events: none;
 }
+/* Which view of the station is drawn, and the way to the other: top left of the gap between
+   the panels, clear of the round station (style guide §10). */
+#station-view {
+  position: fixed;
+  top: 72px;
+  left: calc(18px + 340px + 16px);
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--line);
+  border-left: 2px solid #8ea3b6;
+  background: #08121ce6;
+  font:
+    11px ui-monospace,
+    monospace;
+  letter-spacing: 0.06em;
+}
+#station-view[hidden] {
+  display: none;
+}
+#station-view small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+#station-view button {
+  min-height: 44px;
+}
+@media (max-width: 1100px) {
+  #station-view {
+    left: calc(10px + 250px + 12px);
+  }
+}
 /* Labels, not selections: plain ink on a thin rule. */
 .station-label {
   position: absolute;
@@ -1090,11 +1126,6 @@ body[data-map="open"] #messages {
 .crew-validation {
   min-height: 34px;
 }
-.station-label[data-marker^="berth-"] {
-  background: transparent;
-  padding: 2px 5px;
-}
-
 .crew-quote {
   font-size: 11px;
   margin: 6px 0;
@@ -1109,15 +1140,6 @@ body[data-map="open"] #messages {
   max-width: 100%;
   color: var(--text);
   background: #10202f;
-}
-
-.station-label[data-marker^="berth-"]::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 100%;
-  height: 8px;
-  border-left: 1px solid #8ea3b6;
 }
 
 .tiers .stake {

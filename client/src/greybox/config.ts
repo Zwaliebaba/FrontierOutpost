@@ -1,5 +1,7 @@
 import { SCENE_IDS } from "./scenarios";
 import type { HeightMode, SceneId } from "./scenarios";
+import { DEFAULT_STATION, MOUTH_FACINGS, STATION_SCALES } from "./stationProxy";
+import type { MouthFacing, StationScale } from "./stationProxy";
 import { LOOK_MODES } from "../view/look";
 import type { LookMode } from "../view/look";
 import { ELEVATIONS, PROJECTIONS } from "../view/view";
@@ -14,6 +16,10 @@ export const HEIGHT_MODES = ["flat", "varied"] as const;
 
 export interface Config {
   scene: SceneId;
+  /** The station scene's station, against the Stage 1 station's size (plan 9.1). */
+  scale: StationScale;
+  /** Which way the ring's hangar mouth faces; the Stage 1 station has no mouth. */
+  facing: MouthFacing;
   /** Camera elevation above the gameplay plane, in degrees. */
   elevation: number;
   projection: Projection;
@@ -34,6 +40,8 @@ export interface Config {
 
 export const DEFAULT_CONFIG: Config = {
   scene: "station",
+  scale: DEFAULT_STATION.scale,
+  facing: DEFAULT_STATION.facing,
   elevation: 33,
   projection: "ortho",
   look: "hold",
@@ -66,6 +74,8 @@ export function parseConfig(search: string): Config {
   const d = DEFAULT_CONFIG;
   return {
     scene: oneOf(SCENE_IDS, params.get("scene"), d.scene),
+    scale: oneOf(STATION_SCALES, params.get("scale"), d.scale),
+    facing: oneOf(MOUTH_FACINGS, params.get("facing"), d.facing),
     elevation: oneOf(ELEVATIONS, params.get("elevation"), d.elevation),
     projection: oneOf(PROJECTIONS, params.get("projection"), d.projection),
     look: oneOf(LOOK_MODES, params.get("look"), d.look),
@@ -86,4 +96,18 @@ export function configToSearch(config: Config): string {
     params.set(key, typeof value === "boolean" ? (value ? "1" : "0") : String(value));
   }
   return `?${params.toString()}`;
+}
+
+/**
+ * The download's file name. Results from different stations are never pooled, so the station
+ * scene's names carry its scale and, for the ring, the mouth's facing.
+ */
+export function resultFileName(config: Config): string {
+  const station =
+    config.scene !== "station"
+      ? ""
+      : config.scale === 1
+        ? "-1x"
+        : `-${String(config.scale)}x-${config.facing}`;
+  return `greybox-${config.scene}${station}-${String(config.elevation)}deg.json`;
 }

@@ -2,7 +2,20 @@
 export type Occluder =
   | { kind: "sphere"; x: number; y: number; z: number; radius: number }
   | { kind: "cylinder"; x: number; z: number; radius: number; yMin: number; yMax: number }
-  | { kind: "box"; x: number; z: number; halfX: number; halfZ: number; yMin: number; yMax: number };
+  | {
+      kind: "box";
+      x: number;
+      z: number;
+      halfX: number;
+      halfZ: number;
+      yMin: number;
+      yMax: number;
+      /**
+       * Bearing on the plane of the box's own X axis, in radians: atan2(z, x) of that axis.
+       * Absent means 0, aligned with the world. A ring is built from turned boxes.
+       */
+      yaw?: number;
+    };
 
 export interface Point3 {
   x: number;
@@ -68,12 +81,59 @@ export function rayEntry(origin: Point3, dir: Point3, occluder: Occluder): numbe
       }
       return entryAhead([side, slab(origin.y, dir.y, occluder.yMin, occluder.yMax)]);
     }
-    case "box":
+    case "box": {
+      // In the box's own axes its slabs are axis-aligned. A rotation keeps lengths, so the
+      // distance along the ray is the same in either frame.
+      const local = toBoxAxes(origin, dir, occluder);
       return entryAhead([
-        slab(origin.x, dir.x, occluder.x - occluder.halfX, occluder.x + occluder.halfX),
+        slab(local.x, local.dx, -occluder.halfX, occluder.halfX),
         slab(origin.y, dir.y, occluder.yMin, occluder.yMax),
-        slab(origin.z, dir.z, occluder.z - occluder.halfZ, occluder.z + occluder.halfZ),
+        slab(local.z, local.dz, -occluder.halfZ, occluder.halfZ),
       ]);
+    }
+  }
+}
+
+type Box = Extract<Occluder, { kind: "box" }>;
+
+/** A point and a direction on the plane, relative to a box's centre and in its own axes. */
+function toBoxAxes(point: Point3, dir: Point3, box: Box) {
+  const yaw = box.yaw ?? 0;
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  const x = point.x - box.x;
+  const z = point.z - box.z;
+  return {
+    x: x * cos + z * sin,
+    z: -x * sin + z * cos,
+    dx: dir.x * cos + dir.z * sin,
+    dz: -dir.x * sin + dir.z * cos,
+  };
+}
+
+/** Whether `point` lies inside `occluder`, its surface included. */
+export function contains(point: Point3, occluder: Occluder): boolean {
+  switch (occluder.kind) {
+    case "sphere":
+      return (
+        Math.hypot(point.x - occluder.x, point.y - occluder.y, point.z - occluder.z) <=
+        occluder.radius
+      );
+    case "cylinder":
+      return (
+        point.y >= occluder.yMin &&
+        point.y <= occluder.yMax &&
+        Math.hypot(point.x - occluder.x, point.z - occluder.z) <= occluder.radius
+      );
+    case "box": {
+      const local = toBoxAxes(point, point, occluder);
+      return (
+        point.y >= occluder.yMin &&
+        point.y <= occluder.yMax &&
+        Math.abs(local.x) <= occluder.halfX &&
+        Math.abs(local.z) <= occluder.halfZ
+      );
+    }
   }
 }
 

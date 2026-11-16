@@ -1,6 +1,6 @@
 //! One run of an expedition (design sections 2, 6 and 10): pilots launch from
-//! the dock, fly the approach leg, work the site's pockets under rising threat,
-//! fly the return leg, and dock to bank their cargo. The instance ends when
+//! the station's hangar, fly the approach leg, work the site's pockets under
+//! rising threat, fly the return leg, and dock to bank their cargo. The instance ends when
 //! every pilot has docked, been destroyed or been abandoned, or at its limit.
 //!
 //! The run keeps an event log of everything that matters to the economy and to
@@ -8,6 +8,7 @@
 
 use crate::TICKS_PER_SECOND;
 use crate::Tick;
+use crate::collision::SHIP_RADIUS;
 use crate::extraction::{
     BASIC_CAPACITY, Conditions, EXTRACT_RANGE, Extractor, ExtractorState, MAX_EXTRACT_SPEED,
     Refusal, Stop,
@@ -26,9 +27,14 @@ use crate::site::{
     template_named,
 };
 use crate::skirmish::MAX_NPCS;
+use crate::station::{
+    DEPART_SPACING, DEPART_SPEED, DRAW_IN_SPEED, HANGAR_START, LANE_LENGTH, MOUTH_DISTANCE,
+    MOUTH_WIDTH, Station,
+};
 use crate::wingman::{self, Order as WingmanOrder, Wingman};
 use crate::world::{Kit, ShipId, World};
 use serde::{Deserialize, Serialize};
+use std::f32::consts::TAU;
 
 /// The instance ends this long after launch (design section 10).
 pub const INSTANCE_LIMIT_TICKS: u32 = minutes(45);
@@ -40,10 +46,6 @@ pub const LOCK_RANGE: f32 = 60.0;
 pub const SCAN_TICKS: u32 = 15 * TICKS_PER_SECOND;
 /// The fastest a ship may move and keep scanning, metres per second.
 pub const MAX_SCAN_SPEED: f32 = 1.0;
-/// Leaving this circle around the dock counts as undocking, metres.
-pub const UNDOCK_RADIUS: f32 = 30.0;
-/// Entering this circle around the dock after undocking docks the ship.
-pub const DOCK_RADIUS: f32 = 15.0;
 /// The contract pays when a ship docks with this much site cargo (design 10).
 pub const CONTRACT_MIN_CARGO: u32 = 10;
 /// What each pilot's launch supplies cost, credits (design section 10).
@@ -79,7 +81,8 @@ const MIN_DEBRIS_IMPACT: f32 = 1.0;
 /// Where a pilot is in the run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Phase {
-    /// Launched and still at the dock.
+    /// Launched, and flown out of the hangar along the station's lane by the
+    /// rules, in the crew's departure order, until the lane's end.
     AtDock,
     /// Undocked; not yet in a pocket.
     Approach,
@@ -87,6 +90,8 @@ pub enum Phase {
     Objective,
     /// Left the site after working it, heading home.
     Return,
+    /// Captured at the hangar mouth and drawn in by the rules.
+    Docking,
     Docked,
     Destroyed,
     Abandoned,
@@ -116,7 +121,8 @@ pub enum EndReason {
 }
 
 /// Ticks a pilot spent in each flown phase (design section 2's travel time:
-/// undock to first pocket, last pocket to dock).
+/// undock at the lane's end to first pocket, last pocket to capture at the
+/// hangar mouth).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PhaseTimes {
     pub approach: u32,
@@ -389,7 +395,9 @@ pub struct Options {
 struct PilotRun {
     ship: ShipId,
     wingman: Option<Wingman>,
-    berth_slot: u32,
+    /// The crew roster slot: one ship each, and the order the crew departs
+    /// in. It is never a position.
+    slot: u32,
     phase: Phase,
     cargo: Cargo,
     capacity: u32,
@@ -401,6 +409,8 @@ struct PilotRun {
     undocked_at: Option<u32>,
     first_pocket_at: Option<u32>,
     last_pocket_exit_at: Option<u32>,
+    /// When the hangar mouth captured the ship: its flight home ends here.
+    captured_at: Option<u32>,
     /// The pilot holds the cruise control.
     cruise_requested: bool,
     /// A jump spooling up.
@@ -420,11 +430,59 @@ struct PilotRun {
 }
 
 impl PilotRun {
+    /// A pilot just launched into the hangar, in roster `slot`.
+    fn launched(ship: ShipId, slot: u32) -> Self {
+        Self {
+            ship,
+            wingman: None,
+            slot,
+            phase: Phase::AtDock,
+            cargo: [0; 3],
+            capacity: BASIC_CAPACITY,
+            extractor: Extractor::default(),
+            scan: None,
+            pocket: None,
+            intercepted: 0,
+            undocked_at: None,
+            first_pocket_at: None,
+            last_pocket_exit_at: None,
+            captured_at: None,
+            cruise_requested: false,
+            jump: None,
+            drive: Drive::Ready,
+            disconnected_at: None,
+            exposure_ends: 0,
+            inert: None,
+            last_combat: None,
+            fitted: Vec::new(),
+            fitting: Fitting::BASIC,
+        }
+    }
+
+    /// Whether the rules fly this ship: out of the hangar, or into it.
+    fn scripted(&self) -> bool {
+        matches!(self.phase, Phase::AtDock | Phase::Docking)
+    }
+
+    /// Where the ship stands in the departure queue, earliest first: the
+    /// crew in roster order, each wingman just behind its pilot.
+    fn departure_order(&self, pilots: &[Self]) -> (u32, bool) {
+        let owner_slot = self.wingman.and_then(|wing| {
+            pilots
+                .iter()
+                .find(|pilot| pilot.ship.0 == wing.owner)
+                .map(|pilot| pilot.slot)
+        });
+        (owner_slot.unwrap_or(self.slot), owner_slot.is_some())
+    }
+
     fn total(&self) -> u32 {
         self.cargo.iter().sum()
     }
 
     fn times(&self, end: u32) -> PhaseTimes {
+        // The draw-in after capture is the rules' flying, not the pilot's.
+        let end = self.captured_at.map_or(end, |captured| captured.min(end));
         let undocked = self.undocked_at.unwrap_or(end);
         let Some(first) = self.first_pocket_at else {
             return PhaseTimes {
@@ -451,8 +509,10 @@ pub struct PilotCheckpoint {
     pub ship: u16,
     #[serde(default)]
     pub wingman: Option<Wingman>,
-    #[serde(default)]
-    pub berth_slot: Option<u32>,
+    /// The crew roster slot. Checkpoints from before plan 9.4 call it the
+    /// berth slot.
+    #[serde(default, alias = "berth_slot")]
+    pub slot: Option<u32>,
     pub phase: Phase,
     pub cargo: Cargo,
     pub capacity: u32,
@@ -463,6 +523,9 @@ pub struct PilotCheckpoint {
     pub undocked_at: Option<u32>,
     pub first_pocket_at: Option<u32>,
     pub last_pocket_exit_at: Option<u32>,
+    /// When the hangar mouth captured the ship, if it is being drawn in.
+    #[serde(default)]
+    pub captured_at: Option<u32>,
     /// Whether any interception was planned: what a checkpoint from before
     /// `intercepted_thirds` holds.
     pub intercepted: bool,
@@ -519,6 +582,8 @@ pub struct Run {
     opening_override: Option<u32>,
     world: World,
     site: Site,
+    /// The station at the site's dock.
+    station: Station,
     pilots: Vec<PilotRun>,
     alert: u32,
     /// The tick the first pilot entered a pocket: the alert clock starts here.
@@ -546,17 +611,16 @@ pub struct Run {
 }
 
 impl Run {
-    /// Launches `pilots` ships from the site's dock and places the opening
-    /// threat, scaled for the site's crew. Returns the run and the pilots'
+    /// Launches `pilots` ships from the station's hangar and places the
+    /// opening threat, scaled for the site's crew. The ships leave the
+    /// hangar one after another in roster order ([`Phase::AtDock`]). Returns the run and the pilots'
     /// ships, in order. The rest of a crew may [`Run::join`] for a while.
     #[must_use]
     pub fn launch(site: Site, pilots: u32, options: Options) -> (Self, Vec<ShipId>) {
-        let mut world = World::with_obstacles(site.obstacles.clone());
-        let (dx, dz) = site.template.dock;
-        let (cx, cz) = site.template.centre;
-        let heading = (cz - dz).atan2(cx - dx);
+        let mut world = World::with_obstacles(site.solid_obstacles());
+        let station = site.station();
         let ships: Vec<ShipId> = (0..pilots)
-            .map(|i| world.spawn_pilot_at(berth(&site, i), heading))
+            .map(|_| spawn_in_hangar(&mut world, &station))
             .collect();
         let mut run = Self {
             opening_override: options.opening_threat,
@@ -564,31 +628,11 @@ impl Run {
             pilots: ships
                 .iter()
                 .enumerate()
-                .map(|(index, &ship)| PilotRun {
-                    ship,
-                    wingman: None,
-                    berth_slot: u32::try_from(index).expect("at most four pilots"),
-                    phase: Phase::AtDock,
-                    cargo: [0; 3],
-                    capacity: BASIC_CAPACITY,
-                    extractor: Extractor::default(),
-                    scan: None,
-                    pocket: None,
-                    intercepted: 0,
-                    undocked_at: None,
-                    first_pocket_at: None,
-                    last_pocket_exit_at: None,
-                    cruise_requested: false,
-                    jump: None,
-                    drive: Drive::Ready,
-                    disconnected_at: None,
-                    exposure_ends: 0,
-                    inert: None,
-                    last_combat: None,
-                    fitted: Vec::new(),
-                    fitting: Fitting::BASIC,
+                .map(|(index, &ship)| {
+                    PilotRun::launched(ship, u32::try_from(index).expect("at most four pilots"))
                 })
                 .collect(),
+            station,
             site,
             alert: 0,
             objective_started: None,
@@ -781,6 +825,7 @@ impl Run {
                 continue;
             }
             let owner = ShipId(wing.owner);
+            let scripted = self.pilots[index].scripted();
             if !self.flying(owner) || self.is_disconnected(owner) {
                 wing.order = WingmanOrder::Return;
                 self.pilots[index].wingman = Some(wing);
@@ -788,6 +833,11 @@ impl Run {
             let Some(ship) = self.world.ship(id).cloned() else {
                 continue;
             };
+            // The rules fly it out of the hangar or into it: it takes orders
+            // again once it has left the lane.
+            if scripted {
+                continue;
+            }
             if wing.order == WingmanOrder::Follow
                 && let Some(target) = wing.follow_jump
                 && self.pilots[index].jump.is_none()
@@ -814,9 +864,7 @@ impl Run {
                     )
                 }
                 WingmanOrder::Hold { x, z } => ((x as f32, z as f32), 1.0, true),
-                WingmanOrder::Return => {
-                    (berth(&self.site, self.pilots[index].berth_slot), 1.0, true)
-                }
+                WingmanOrder::Return => self.homing((ship.state.x, ship.state.z)),
                 WingmanOrder::Extract { deposit } => {
                     // Explicit mark only: no rich-pocket, relay or wave values are read.
                     let Some(deposit) = self.site.deposits.get(deposit as usize) else {
@@ -825,14 +873,6 @@ impl Run {
                     ((deposit.x, deposit.z), EXTRACT_RANGE * 0.55, true)
                 }
             };
-            if wing.order == WingmanOrder::Return
-                && self.pilots[index].phase == Phase::AtDock
-                && (ship.state.x - point.0).hypot(ship.state.z - point.1) <= DOCK_RADIUS
-            {
-                self.world.remove_ship(id);
-                self.finish(index, Ending::Docked);
-                continue;
-            }
             let waypoint = wingman::waypoint(&ship, point, self.world.obstacles());
             let input = wingman::steer(
                 &ship,
@@ -884,6 +924,20 @@ impl Run {
                         WingmanOrder::Return;
                 }
             }
+        }
+    }
+
+    /// Where a wingman going home steers from `position`, how close it
+    /// stops, and whether it may cruise: to the lane's end, then straight in
+    /// at the mouth, where the capture zone takes it.
+    fn homing(&self, position: (f32, f32)) -> ((f32, f32), f32, bool) {
+        let (across, along) = self.station.local(position);
+        let lined_up = across.abs() <= MOUTH_WIDTH / 2.0 - 1.5
+            && (MOUTH_DISTANCE..=MOUTH_DISTANCE + LANE_LENGTH + 5.0).contains(&along);
+        if lined_up {
+            (self.station.mouth(), 0.0, false)
+        } else {
+            (self.station.lane_end(), 2.0, true)
         }
     }
 
@@ -962,19 +1016,19 @@ impl Run {
         })
     }
 
-    /// Launches one more crew member into the instance, at the dock, while
-    /// the join window is open and the crew the site was scaled for is not
-    /// all here. Returns their ship.
+    /// Launches one more crew member into the instance, in the hangar,
+    /// while the join window is open and the crew the site was scaled for is
+    /// not all here. Returns their ship.
     pub fn join(&mut self) -> Option<ShipId> {
-        let slot = (0..self.site.pilots)
-            .find(|slot| !self.pilots.iter().any(|p| p.berth_slot == *slot))?;
+        let slot =
+            (0..self.site.pilots).find(|slot| !self.pilots.iter().any(|p| p.slot == *slot))?;
         self.join_at(slot)
     }
 
-    /// Joins at the server-assigned roster slot, even if crewmates follow out of order.
+    /// Joins at the server-assigned roster slot, even if crewmates follow
+    /// out of order. The ship queues behind any still leaving the hangar.
     pub fn join_at(&mut self, slot: u32) -> Option<ShipId> {
-        if slot >= self.site.pilots || slot >= 4 || self.pilots.iter().any(|p| p.berth_slot == slot)
-        {
+        if slot >= self.site.pilots || slot >= 4 || self.pilots.iter().any(|p| p.slot == slot) {
             return None;
         }
         let joined = u32::try_from(self.pilots.len()).unwrap_or(u32::MAX);
@@ -982,34 +1036,8 @@ impl Run {
         {
             return None;
         }
-        let (dx, dz) = self.site.template.dock;
-        let (cx, cz) = self.site.template.centre;
-        let heading = (cz - dz).atan2(cx - dx);
-        let ship = self.world.spawn_pilot_at(berth(&self.site, slot), heading);
-        self.pilots.push(PilotRun {
-            ship,
-            wingman: None,
-            berth_slot: slot,
-            phase: Phase::AtDock,
-            cargo: [0; 3],
-            capacity: BASIC_CAPACITY,
-            extractor: Extractor::default(),
-            scan: None,
-            pocket: None,
-            intercepted: 0,
-            undocked_at: None,
-            first_pocket_at: None,
-            last_pocket_exit_at: None,
-            cruise_requested: false,
-            jump: None,
-            drive: Drive::Ready,
-            disconnected_at: None,
-            exposure_ends: 0,
-            inert: None,
-            last_combat: None,
-            fitted: Vec::new(),
-            fitting: Fitting::BASIC,
-        });
+        let ship = spawn_in_hangar(&mut self.world, &self.station);
+        self.pilots.push(PilotRun::launched(ship, slot));
         self.log(RunEvent::Joined { pilot: ship });
         self.log(RunEvent::SuppliesSpent {
             pilot: ship,
@@ -1177,13 +1205,15 @@ impl Run {
         if self.pilots[index].extractor.is_on() {
             return Err(JumpRefusal::Extracting);
         }
+        let scripted = self.pilots[index].scripted();
         match target {
-            JumpTarget::Dock if self.pilots[index].phase == Phase::AtDock => {
+            JumpTarget::Dock if scripted => {
                 return Err(JumpRefusal::AlreadyThere);
             }
             JumpTarget::Dock => {}
-            // A jump is made from open space: the pilot flies off the berth first.
-            JumpTarget::Pocket(_) if self.pilots[index].phase == Phase::AtDock => {
+            // A jump is made from open space: the launch hands the ship over
+            // at the lane's end first.
+            JumpTarget::Pocket(_) if scripted => {
                 return Err(JumpRefusal::AtDock);
             }
             JumpTarget::Pocket(pocket) => {
@@ -1530,7 +1560,7 @@ impl Run {
                     PilotCheckpoint {
                         ship: pilot.ship.0,
                         wingman: pilot.wingman,
-                        berth_slot: Some(pilot.berth_slot),
+                        slot: Some(pilot.slot),
                         phase: pilot.phase,
                         cargo: pilot.cargo,
                         capacity: pilot.capacity,
@@ -1541,6 +1571,7 @@ impl Run {
                         undocked_at: pilot.undocked_at,
                         first_pocket_at: pilot.first_pocket_at,
                         last_pocket_exit_at: pilot.last_pocket_exit_at,
+                        captured_at: pilot.captured_at,
                         intercepted: pilot.intercepted > 0,
                         intercepted_thirds: Some(pilot.intercepted),
                         fitted: pilot.fitted.clone(),
@@ -1561,7 +1592,11 @@ impl Run {
     /// section 6). Each pilot's ship waits, held inert where it was, for its
     /// pilot to reconnect within the grace window. The NPCs are not restored
     /// (the owner's decision): the alert and its clock carry on, so the next
-    /// wave arrives on time. Returns `None` for a checkpoint of an unknown site.
+    /// wave arrives on time. A ship saved on a scripted path, leaving the
+    /// hangar or drawn into it, carries on along it from where it was saved
+    /// once its pilot is back: the path is worked out from the ship's place
+    /// each tick, so nothing else need be kept. Returns `None` for a
+    /// checkpoint of an unknown site.
     #[must_use]
     pub fn restore(checkpoint: &Checkpoint) -> Option<Self> {
         let template = template_named(&checkpoint.template)?;
@@ -1577,8 +1612,9 @@ impl Run {
         for (deposit, remaining) in site.deposits.iter_mut().zip(&checkpoint.deposits) {
             deposit.remaining = *remaining;
         }
-        let mut world = World::with_obstacles(site.obstacles.clone());
+        let mut world = World::with_obstacles(site.solid_obstacles());
         world.set_tick(Tick::new(u64::from(checkpoint.elapsed)));
+        let station = site.station();
         let now = checkpoint.elapsed;
         let pilots = checkpoint
             .crew
@@ -1595,8 +1631,8 @@ impl Run {
                 PilotRun {
                     ship: ShipId(saved.ship),
                     wingman: saved.wingman,
-                    berth_slot: saved
-                        .berth_slot
+                    slot: saved
+                        .slot
                         .unwrap_or(u32::try_from(index).expect("at most four pilots")),
                     phase: saved.phase,
                     cargo: saved.cargo,
@@ -1614,6 +1650,7 @@ impl Run {
                     undocked_at: saved.undocked_at,
                     first_pocket_at: saved.first_pocket_at,
                     last_pocket_exit_at: saved.last_pocket_exit_at,
+                    captured_at: saved.captured_at,
                     cruise_requested: false,
                     jump: None,
                     drive: Drive::Ready,
@@ -1630,6 +1667,7 @@ impl Run {
             opening_override: checkpoint.opening_threat,
             world,
             site,
+            station,
             pilots,
             alert: checkpoint.alert,
             objective_started: checkpoint.objective_started,
@@ -1762,6 +1800,8 @@ impl Run {
         self.rise_with_time();
         self.gate_drives();
         self.work_jumps();
+        self.fly_departures();
+        self.draw_in();
         self.world.step();
         self.note_combat();
         self.debris_damage();
@@ -2124,8 +2164,6 @@ impl Run {
             return;
         };
         let now = self.elapsed();
-        let (dx, dz) = self.site.template.dock;
-        let from_dock = (state.x - dx).hypot(state.z - dz);
 
         let pocket = self.site.pocket_at(state.x, state.z);
         let was = self.pilots[index].pocket;
@@ -2150,11 +2188,6 @@ impl Run {
         let in_site = self.site.contains(state.x, state.z);
         let phase = self.pilots[index].phase;
         match phase {
-            Phase::AtDock if from_dock > UNDOCK_RADIUS => {
-                self.pilots[index].phase = Phase::Approach;
-                self.pilots[index].undocked_at = Some(now);
-                self.log(RunEvent::Undocked { pilot: ship });
-            }
             Phase::Approach if pocket.is_some() => {
                 self.pilots[index].phase = Phase::Objective;
                 self.pilots[index].first_pocket_at = Some(now);
@@ -2168,10 +2201,174 @@ impl Run {
             Phase::Return if in_site => self.pilots[index].phase = Phase::Objective,
             _ => {}
         }
-        let undocked = !matches!(self.pilots[index].phase, Phase::AtDock);
-        if undocked && from_dock <= DOCK_RADIUS {
-            self.world.remove_ship(ship);
-            self.finish(index, Ending::Docked);
+        let flown = matches!(
+            self.pilots[index].phase,
+            Phase::Approach | Phase::Objective | Phase::Return
+        );
+        if flown && self.station.captures((state.x, state.z), state.velocity()) {
+            self.capture(index);
+        }
+    }
+
+    /// The hangar mouth has caught a ship flying in: the rules take it from
+    /// here and draw it in ([`Run::draw_in`]). Its flight home ends now.
+    fn capture(&mut self, index: usize) {
+        let now = self.elapsed();
+        let pilot = &mut self.pilots[index];
+        let ship = pilot.ship;
+        pilot.phase = Phase::Docking;
+        pilot.captured_at = Some(now);
+        pilot.cruise_requested = false;
+        pilot.jump = None;
+        pilot.scan = None;
+        pilot.extractor.stop();
+        self.world.set_scripted(ship, true);
+        self.world.set_extracting(ship, false);
+    }
+
+    /// Flies the departure queue out of the hangar: each ship moves along
+    /// the lane at [`DEPART_SPEED`] once the ship ahead of it is
+    /// [`DEPART_SPACING`] further on, and is handed to its pilot at the
+    /// lane's end, keeping its speed. That is when it has undocked. A crew
+    /// ship in the pilots' hands on the lane ahead, one stopped at its end
+    /// or flying in, holds the queue the same way, so a launch never runs
+    /// into it. One clear of the lane's end does not: the launch hands the
+    /// ship over before reaching it, and from there ships collide as in
+    /// flight, without harm. Pilots who leave their ships coasting on after
+    /// the handover pack them a few metres beyond the end, and that would
+    /// otherwise hold the last of a crew of four on the script, just short
+    /// of the end, until a crewmate moved.
+    ///
+    /// The queue is read from where the ships are, so a ship restored from a
+    /// checkpoint, or reconnected after being held inert, carries on from
+    /// its place. One that is not on the lane, as on a checkpoint from before
+    /// the station, starts again from the hangar.
+    fn fly_departures(&mut self) {
+        let station = self.station;
+        let lane_end = MOUTH_DISTANCE + LANE_LENGTH;
+        // A crew ship touching the lane's end holds the queue; one clear of it does not.
+        let held_to = lane_end + 2.0 * SHIP_RADIUS;
+        let mut queue: Vec<(usize, f32, (u32, bool))> = Vec::new();
+        for index in 0..self.pilots.len() {
+            let pilot = &self.pilots[index];
+            if pilot.phase != Phase::AtDock {
+                continue;
+            }
+            let Some(state) = self.world.ship(pilot.ship).map(|s| s.state) else {
+                continue;
+            };
+            let (across, along) = station.local((state.x, state.z));
+            if along >= lane_end {
+                // Already beyond the lane's end: in the pilot's hands now.
+                self.undock(index);
+                continue;
+            }
+            let on_lane = across.abs() < 0.01 && along >= HANGAR_START - 0.01;
+            let along = if on_lane { along } else { HANGAR_START };
+            queue.push((index, along, pilot.departure_order(&self.pilots)));
+        }
+        // Farthest out first; ships level with one another go in order.
+        queue.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.2.cmp(&b.2)));
+        let in_the_way: Vec<f32> = self
+            .pilots
+            .iter()
+            .filter(|pilot| {
+                matches!(
+                    pilot.phase,
+                    Phase::Approach | Phase::Objective | Phase::Return
+                )
+            })
+            .filter_map(|pilot| self.world.ship(pilot.ship))
+            .map(|ship| station.local((ship.state.x, ship.state.z)))
+            .filter(|(across, along)| {
+                across.abs() < MOUTH_WIDTH / 2.0 + SHIP_RADIUS && *along < held_to
+            })
+            .map(|(_, along)| along)
+            .collect();
+        let step = DEPART_SPEED * crate::ship::DT;
+        let heading = station.heading().rem_euclid(TAU);
+        let mut queued: Option<f32> = None;
+        for (index, along, _) in queue {
+            let ahead = in_the_way
+                .iter()
+                .copied()
+                .filter(|&other| other > along)
+                .chain(queued)
+                .min_by(f32::total_cmp);
+            let room = ahead.map_or(f32::INFINITY, |ahead| ahead - DEPART_SPACING);
+            let next = (along + step).min(room).max(along);
+            queued = Some(next);
+            let ship = self.pilots[index].ship;
+            let (x, z) = station.on_axis(next);
+            let done = next >= lane_end;
+            let speed = if next > along || done {
+                DEPART_SPEED
+            } else {
+                0.0
+            };
+            self.world.set_state(
+                ship,
+                ShipState {
+                    x,
+                    z,
+                    heading,
+                    speed,
+                },
+            );
+            if done {
+                self.undock(index);
+            } else {
+                self.world.set_scripted(ship, true);
+            }
+        }
+    }
+
+    /// Hands a departing ship to its pilot: it has undocked.
+    fn undock(&mut self, index: usize) {
+        let ship = self.pilots[index].ship;
+        self.world.set_scripted(ship, false);
+        self.pilots[index].phase = Phase::Approach;
+        self.pilots[index].undocked_at = Some(self.elapsed());
+        self.log(RunEvent::Undocked { pilot: ship });
+    }
+
+    /// Draws each captured ship in to the hangar at [`DRAW_IN_SPEED`],
+    /// onto the lane's axis and back along it, and docks it on arrival.
+    fn draw_in(&mut self) {
+        let station = self.station;
+        let step = DRAW_IN_SPEED * crate::ship::DT;
+        for index in 0..self.pilots.len() {
+            if self.pilots[index].phase != Phase::Docking {
+                continue;
+            }
+            let ship = self.pilots[index].ship;
+            let Some(state) = self.world.ship(ship).map(|s| s.state) else {
+                continue;
+            };
+            let (across, along) = station.local((state.x, state.z));
+            if across.abs() <= step && (along - HANGAR_START).abs() <= step {
+                self.world.remove_ship(ship);
+                self.finish(index, Ending::Docked);
+                continue;
+            }
+            let towards = |from: f32, to: f32| from + (to - from).clamp(-step, step);
+            let next = (towards(across, 0.0), towards(along, HANGAR_START));
+            let (x, z) = station.world(next);
+            let heading = if (x - state.x).hypot(z - state.z) > 1e-4 {
+                (z - state.z).atan2(x - state.x).rem_euclid(TAU)
+            } else {
+                state.heading
+            };
+            self.world.set_scripted(ship, true);
+            self.world.set_state(
+                ship,
+                ShipState {
+                    x,
+                    z,
+                    heading,
+                    speed: DRAW_IN_SPEED,
+                },
+            );
         }
     }
 
@@ -2192,11 +2389,13 @@ impl Run {
         if raiders == 0 {
             return;
         }
-        let (dx, dz) = self.site.template.dock;
-        let (vx, vz) = (dx - state.x, dz - state.z);
+        // Between the ship and the hangar mouth, never on the station.
+        let (mx, mz) = self.station.mouth();
+        let (vx, vz) = (mx - state.x, mz - state.z);
         let length = vx.hypot(vz).max(1.0);
         let ahead = self.site.template.intercept_distance.min(length * 0.8);
         let point = clamp_to_arena((state.x + vx / length * ahead, state.z + vz / length * ahead));
+        let radius = ShipKind::Raider.profile().radius;
         let mut spawned = 0;
         for i in 0..raiders {
             if self.npc_count() >= MAX_NPCS {
@@ -2204,6 +2403,7 @@ impl Run {
             }
             let side = (i as f32 - (raiders as f32 - 1.0) / 2.0) * 6.0;
             let at = clamp_to_arena((point.0 - vz / length * side, point.1 + vx / length * side));
+            let at = self.station.outside(at, radius);
             self.spawn_hostile(ShipKind::Raider, at, at);
             spawned += 1;
         }
@@ -2420,14 +2620,13 @@ impl Run {
     }
 }
 
-/// Where crew member `index` starts: side by side across the launch
-/// direction at the dock, using the same authored offsets as the station.
-fn berth(site: &Site, index: u32) -> (f32, f32) {
-    let (dx, dz) = site.template.dock;
-    let (cx, cz) = site.template.centre;
-    let heading = (cz - dz).atan2(cx - dx);
-    let offset = crate::berths::lateral(index);
-    (dx + heading.sin() * offset, dz - heading.cos() * offset)
+/// A pilot's ship at the start of the hangar, facing out of the mouth, on
+/// its scripted way out: ships waiting their turn share that place, and a
+/// scripted ship touches nothing.
+fn spawn_in_hangar(world: &mut World, station: &Station) -> ShipId {
+    let ship = world.spawn_pilot_at(station.hangar_start(), station.heading().rem_euclid(TAU));
+    world.set_scripted(ship, true);
+    ship
 }
 
 /// Full thirds of `capacity` that `cargo` fills: one return-leg raider each.
@@ -2508,19 +2707,39 @@ mod tests {
         })
     }
 
-    /// Takes the pilot just clear of the dock, toward the site, at rest.
+    /// Lets the launch fly the pilot out of the hangar, and stops the ship
+    /// where it is handed over, at the lane's end.
     fn undock(run: &mut Run, ship: ShipId) {
-        let (dx, dz) = run.site.template.dock;
-        let (cx, cz) = run.site.template.centre;
-        let length = (cx - dx).hypot(cz - dz);
-        let out = UNDOCK_RADIUS + 5.0;
-        place(
-            run,
-            ship,
-            (dx + (cx - dx) / length * out, dz + (cz - dz) / length * out),
-        );
-        run.step();
+        for _ in 0..10 * TICKS_PER_SECOND {
+            if run.status(ship).unwrap().phase != Phase::AtDock {
+                break;
+            }
+            run.step();
+        }
         assert_eq!(run.status(ship).unwrap().phase, Phase::Approach);
+        run.world.ship_mut(ship).unwrap().state.speed = 0.0;
+    }
+
+    /// Flies the ship into the hangar mouth from just in front of it, and
+    /// steps until the draw-in has docked it.
+    pub(super) fn fly_in(run: &mut Run, ship: ShipId) {
+        let station = run.station;
+        let (x, z) = station.on_axis(MOUTH_DISTANCE + 4.0);
+        run.world.ship_mut(ship).expect("the ship is flying").state = ShipState {
+            x,
+            z,
+            heading: (station.heading() + std::f32::consts::PI).rem_euclid(TAU),
+            speed: 3.0,
+        };
+        run.step();
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Docking);
+        for _ in 0..10 * TICKS_PER_SECOND {
+            if run.status(ship).unwrap().phase != Phase::Docking {
+                break;
+            }
+            run.step();
+        }
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Docked);
     }
 
     /// Takes the pilot from the dock into the ore field, at its first deposit.
@@ -2619,7 +2838,7 @@ mod tests {
             run.jump(ship, Some(JumpTarget::Dock)),
             Err(JumpRefusal::AlreadyThere)
         );
-        // Still on the berth: the pilot flies clear before the drive spools.
+        // Still leaving the hangar: the launch hands over before the drive spools.
         assert_eq!(
             run.jump(ship, Some(JumpTarget::Pocket(0))),
             Err(JumpRefusal::AtDock)
@@ -2688,16 +2907,18 @@ mod tests {
         run.pilots[0].cargo = [14, 0, 0];
         run.jump(ship, Some(JumpTarget::Dock)).unwrap();
         steps(&mut run, SPOOL_TICKS + 1);
-        let (dx, dz) = COMPACT_SITE.dock;
+        let (dx, dz) = run.station.mouth();
         let state = run.world.ship(ship).expect("not docked").state;
         let from_dock = (state.x - dx).hypot(state.z - dz);
-        assert!(from_dock > DOCK_RADIUS + 20.0, "{from_dock}");
+        assert!(from_dock > crate::jump::DOCK_STANDOFF, "{from_dock}");
+        assert!(!run.station.overlaps_footprint((state.x, state.z)));
         assert_eq!(run.status(ship).unwrap().phase, Phase::Return);
         assert!(events(&mut run).contains(&RunEvent::Intercepted {
             pilot: ship,
             raiders: 2
         }));
-        // Each raider is nearer the dock than the ship is.
+        // Each raider is nearer the mouth than the ship is, and clear of
+        // the station.
         for raider in run
             .world
             .ships()
@@ -2706,16 +2927,20 @@ mod tests {
         {
             let theirs = (raider.state.x - dx).hypot(raider.state.z - dz);
             assert!(theirs < from_dock, "{theirs} against {from_dock}");
+            assert!(
+                !run.station
+                    .overlaps_footprint((raider.state.x, raider.state.z))
+            );
         }
     }
 
     #[test]
-    fn an_empty_jump_home_lands_just_outside_the_berth() {
+    fn an_empty_jump_home_lands_just_outside_the_mouth() {
         let (mut run, ship) = quiet(6);
         at_deposit(&mut run, ship);
         run.jump(ship, Some(JumpTarget::Dock)).unwrap();
         steps(&mut run, SPOOL_TICKS + 1);
-        let (dx, dz) = COMPACT_SITE.dock;
+        let (dx, dz) = run.station.mouth();
         let state = run.world.ship(ship).expect("not docked yet").state;
         let from_dock = (state.x - dx).hypot(state.z - dz);
         assert!(
@@ -2797,7 +3022,7 @@ mod tests {
     }
 
     #[test]
-    fn launches_pilots_at_the_dock_with_the_opening_threat() {
+    fn launches_pilots_in_the_hangar_with_the_opening_threat() {
         let site = Site::generate(COMPACT_SITE, 4, ThreatTier::I, 1, &[]);
         let (mut run, ships) = Run::launch(site, 1, Options::default());
         let npcs = run
@@ -2807,9 +3032,10 @@ mod tests {
             .filter(|s| s.kind != ShipKind::Pilot);
         assert_eq!(npcs.count(), 3);
         let state = run.world.ship(ships[0]).unwrap().state;
-        let (dx, dz) = COMPACT_SITE.dock;
-        assert!((state.x - dx).abs() < 0.001);
-        assert!((state.z - dz - 6.0).abs() < 0.001);
+        let (hx, hz) = run.station.hangar_start();
+        assert!((state.x - hx).hypot(state.z - hz) < 0.001);
+        assert!((state.heading - run.station.heading().rem_euclid(TAU)).abs() < 1e-4);
+        assert!(run.station.in_hangar((state.x, state.z)));
         assert_eq!(run.status(ships[0]).unwrap().phase, Phase::AtDock);
         assert_eq!(
             events(&mut run),
@@ -2860,8 +3086,7 @@ mod tests {
         run.step();
         assert_eq!(run.status(ship).unwrap().phase, Phase::Return);
         steps(&mut run, 60);
-        place(&mut run, ship, COMPACT_SITE.dock);
-        run.step();
+        fly_in(&mut run, ship);
         assert_eq!(run.ended(), Some(EndReason::AllDone));
         let log = events(&mut run);
         let docked = log.iter().find_map(|event| match event {
@@ -2871,7 +3096,10 @@ mod tests {
         let summary = docked.expect("the pilot docked");
         assert_eq!(summary.ending, Ending::Docked);
         assert_eq!(settled(&log), Some(Pot::default()), "no cargo, no contract");
-        assert_eq!(summary.phases.approach, 102, "100 steps and two placements");
+        assert_eq!(
+            summary.phases.approach, 103,
+            "the handover's tick, 100 steps and two placements"
+        );
         assert_eq!(summary.phases.objective, 201);
         assert_eq!(summary.phases.return_leg, 61);
     }
@@ -3012,8 +3240,7 @@ mod tests {
         let (mut run, ship) = quiet(7);
         at_deposit(&mut run, ship);
         run.pilots[0].cargo = [12, 0, 0];
-        place(&mut run, ship, COMPACT_SITE.dock);
-        run.step();
+        fly_in(&mut run, ship);
         let log = events(&mut run);
         let summary = log.iter().find_map(|event| match event {
             RunEvent::Docked { summary, .. } => Some(*summary),
@@ -3130,6 +3357,7 @@ mod tests {
     #[test]
     fn the_cruise_drive_triples_speed_on_the_legs_but_not_in_the_site() {
         let (mut run, ship) = quiet(16);
+        undock(&mut run, ship);
         let cruise = ShipInput {
             thrust: 1.0,
             turn: 0.0,
@@ -3404,9 +3632,8 @@ mod tests {
         let top_speed = |ids: &[&str]| {
             let (mut run, ship) = quiet(23);
             run.fit(ship, &fitted(ids));
-            // Compare fittings on the clear centreline, independently of the assigned berth.
-            let dock = run.site.template.dock;
-            place(&mut run, ship, dock);
+            // Compare fittings from the lane's end, on the clear centreline.
+            undock(&mut run, ship);
             run.set_controls(
                 ship,
                 ShipInput {
@@ -3609,9 +3836,7 @@ mod tests {
         run.set_controls(ship, ShipInput::default(), false);
         place(&mut run, ship, (cx + 200.0, cz));
         run.step();
-        let dock = run.site.template.dock;
-        place(&mut run, ship, dock);
-        run.step();
+        fly_in(&mut run, ship);
         let log = events(&mut run);
         let summary = log.iter().find_map(|event| match event {
             RunEvent::Docked { summary, .. } => Some(*summary),
@@ -3673,32 +3898,399 @@ mod tests {
         (run, ships[0])
     }
 
+    /// Moves every ship its pilot has been handed off the lane, as pilots
+    /// fly off towards the site, each to its own place.
+    fn fly_clear(run: &mut Run) {
+        let station = run.station;
+        for index in 0..run.pilots.len() {
+            if run.pilots[index].phase != Phase::Approach {
+                continue;
+            }
+            let ship = run.pilots[index].ship;
+            let state = run.world.ship(ship).unwrap().state;
+            let (across, _) = station.local((state.x, state.z));
+            if across.abs() < 20.0 {
+                let spot = station.world((30.0 + 10.0 * index as f32, 60.0));
+                place(run, ship, spot);
+            }
+        }
+    }
+
+    /// The pilots that undocked, in order, from `log`.
+    fn undocked(log: &[RunEvent]) -> Vec<ShipId> {
+        log.iter()
+            .filter_map(|event| match event {
+                RunEvent::Undocked { pilot } => Some(*pilot),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
-    fn four_pilots_keep_their_berths_when_following_out_of_order() {
+    fn four_pilots_keep_their_roster_slots_and_leave_in_roster_order() {
         let (mut run, host) = crew_run(40, 4);
         let last = run.join_at(3).unwrap();
         let second = run.join_at(1).unwrap();
         assert!(
             run.join_at(3).is_none(),
-            "a berth cannot be allocated twice"
+            "a roster slot cannot be taken twice"
         );
-        assert!(run.join_at(4).is_none(), "only four berths exist");
+        assert!(run.join_at(4).is_none(), "only four slots exist");
         let third = run.join_at(2).unwrap();
-        for (slot, ship) in [host, second, third, last].into_iter().enumerate() {
-            let state = run.world.ship(ship).unwrap().state;
-            let expected = berth(run.site(), u32::try_from(slot).unwrap());
-            assert!((state.x - expected.0).hypot(state.z - expected.1) < 0.001);
-        }
         let checkpoint = run.checkpoint();
         let restored = Run::restore(&checkpoint).unwrap();
         assert_eq!(
-            restored
-                .pilots
-                .iter()
-                .map(|p| p.berth_slot)
-                .collect::<Vec<_>>(),
+            restored.pilots.iter().map(|p| p.slot).collect::<Vec<_>>(),
             [0, 3, 1, 2]
         );
+        events(&mut run);
+        for _ in 0..10 * TICKS_PER_SECOND {
+            run.step();
+            fly_clear(&mut run);
+        }
+        // Following out of order does not change the order they leave in.
+        assert_eq!(undocked(&events(&mut run)), [host, second, third, last]);
+    }
+
+    #[test]
+    fn a_checkpoint_from_before_the_station_keeps_its_berth_slots_as_roster_slots() {
+        let (mut run, _) = crew_run(40, 2);
+        run.join().unwrap();
+        let mut json = serde_json::to_value(run.checkpoint()).unwrap();
+        for (slot, pilot) in json["crew"].as_array_mut().unwrap().iter_mut().enumerate() {
+            let pilot = pilot.as_object_mut().unwrap();
+            pilot.remove("slot");
+            pilot.remove("captured_at");
+            // Berths were slots too, and the ship stood beside the dock.
+            pilot.insert("berth_slot".into(), (1 - slot).into());
+            pilot.insert("x".into(), (-120.0).into());
+            pilot.insert("z".into(), (3.0 * slot as f32).into());
+        }
+        let checkpoint: Checkpoint = serde_json::from_value(json).unwrap();
+        let mut restored = Run::restore(&checkpoint).unwrap();
+        assert_eq!(
+            restored.pilots.iter().map(|p| p.slot).collect::<Vec<_>>(),
+            [1, 0]
+        );
+        // A ship saved on a berth, now inside the hull, leaves from the hangar.
+        let ships = restored.ships();
+        for &ship in &ships {
+            assert!(restored.reconnect(ship));
+        }
+        restored.step();
+        for &ship in &ships {
+            let state = restored.world.ship(ship).unwrap().state;
+            let (across, along) = restored.station.local((state.x, state.z));
+            assert!(
+                across.abs() < 1e-3 && along < MOUTH_DISTANCE,
+                "{across}, {along}"
+            );
+        }
+        steps(&mut restored, 10 * TICKS_PER_SECOND);
+        assert!(
+            ships
+                .iter()
+                .all(|&ship| restored.status(ship).unwrap().phase == Phase::Approach)
+        );
+    }
+
+    #[test]
+    fn four_ships_launching_together_reach_their_lane_ends_without_colliding() {
+        let site = Site::generate(COMPACT_SITE, 40, ThreatTier::I, 4, &[]);
+        let options = Options {
+            opening_threat: Some(0),
+            ..Options::default()
+        };
+        let (mut run, ships) = Run::launch(site, 4, options);
+        let station = run.station;
+        let lane_end = MOUTH_DISTANCE + LANE_LENGTH;
+        let mut handed_over = Vec::new();
+        for _ in 0..15 * TICKS_PER_SECOND {
+            run.step();
+            fly_clear(&mut run);
+            let flying: Vec<_> = ships
+                .iter()
+                .map(|&ship| {
+                    let state = run.world.ship(ship).unwrap().state;
+                    (
+                        ship,
+                        station.local((state.x, state.z)),
+                        run.status(ship).unwrap(),
+                    )
+                })
+                .collect();
+            for &(ship, (across, along), status) in &flying {
+                if status.phase == Phase::AtDock {
+                    // On the axis, inside the station's lane, never pushed off it.
+                    assert!(across.abs() < 1e-3, "{across}");
+                    assert!((HANGAR_START - 1e-3..lane_end).contains(&along));
+                } else if !handed_over.contains(&ship) {
+                    assert_eq!(status.phase, Phase::Approach);
+                    handed_over.push(ship);
+                }
+            }
+            // Ships that have left the hangar's start never touch another.
+            for (i, a) in flying.iter().enumerate() {
+                for b in &flying[i + 1..] {
+                    let moving = |along: f32| along > HANGAR_START + 1e-3;
+                    if moving(a.1.1) && moving(b.1.1) && a.1.1 < lane_end && b.1.1 < lane_end {
+                        let gap = (a.1.0 - b.1.0).hypot(a.1.1 - b.1.1);
+                        assert!(gap >= DEPART_SPACING - 1e-3, "{gap}");
+                    }
+                }
+            }
+            assert!(run.world.impacts().is_empty(), "nothing hit the hull");
+        }
+        assert_eq!(handed_over, ships, "all four, in roster order");
+        let log = events(&mut run);
+        assert_eq!(undocked(&log), ships);
+    }
+
+    #[test]
+    fn four_pilots_who_never_steer_all_leave_the_lane() {
+        // Each launches a second after the one before and leaves the ship to
+        // coast on from the lane's end: none is held on the script for good.
+        let site = Site::generate(COMPACT_SITE, 40, ThreatTier::I, 4, &[]);
+        let options = Options {
+            opening_threat: Some(0),
+            ..Options::default()
+        };
+        let (mut run, mut ships) = Run::launch(site, 1, options);
+        for _ in 1..4 {
+            for _ in 0..TICKS_PER_SECOND {
+                run.step();
+            }
+            ships.push(run.join().expect("a slot is free"));
+        }
+        for _ in 0..20 * TICKS_PER_SECOND {
+            run.step();
+        }
+        for ship in ships {
+            assert_eq!(run.status(ship).unwrap().phase, Phase::Approach, "{ship:?}");
+        }
+        assert_eq!(undocked(&events(&mut run)).len(), 4);
+    }
+
+    #[test]
+    fn the_departure_ignores_the_pilot_and_hands_over_at_the_lane_end() {
+        let (mut run, ship) = quiet(6);
+        let station = run.station;
+        events(&mut run);
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(0))),
+            Err(JumpRefusal::AtDock)
+        );
+        // Hard about at full thrust: the launch flies the ship regardless.
+        run.set_controls(
+            ship,
+            ShipInput {
+                thrust: 1.0,
+                turn: 1.0,
+                cruise: true,
+            },
+            false,
+        );
+        let path = MOUTH_DISTANCE + LANE_LENGTH - HANGAR_START;
+        let ticks = (path / (DEPART_SPEED * crate::ship::DT)).ceil() as u32;
+        steps(&mut run, ticks - 1);
+        let state = run.world.ship(ship).unwrap().state;
+        let (across, along) = station.local((state.x, state.z));
+        assert!(across.abs() < 1e-3);
+        assert!((along - (HANGAR_START + (ticks - 1) as f32 * DEPART_SPEED / 20.0)).abs() < 0.01);
+        assert!((state.speed - DEPART_SPEED).abs() < 1e-4);
+        assert_eq!(run.status(ship).unwrap().phase, Phase::AtDock);
+        assert!(undocked(&events(&mut run)).is_empty());
+        // Undocked at the lane's end, at speed, and the pilot's input takes over.
+        run.step();
+        let log = run.take_events();
+        assert!(log.contains(&(ticks - 1, RunEvent::Undocked { pilot: ship })));
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Approach);
+        assert_eq!(run.pilots[0].undocked_at, Some(ticks - 1));
+        let state = run.world.ship(ship).unwrap().state;
+        assert!(station.along((state.x, state.z)) >= MOUTH_DISTANCE + LANE_LENGTH);
+        assert!(state.speed > DEPART_SPEED * 0.9, "{}", state.speed);
+        assert!(
+            (state.heading - station.heading().rem_euclid(TAU)).abs() > 0.05,
+            "turning now"
+        );
+        assert_eq!(run.jump(ship, Some(JumpTarget::Pocket(0))), Ok(()));
+    }
+
+    #[test]
+    fn a_ship_stopped_on_the_lane_holds_the_launch_behind_it() {
+        let (mut run, host) = crew_run(42, 2);
+        undock(&mut run, host);
+        let station = run.station;
+        let stopped = station.on_axis(MOUTH_DISTANCE + LANE_LENGTH + 2.0);
+        place(&mut run, host, stopped);
+        let wing = run.join().unwrap();
+        steps(&mut run, 8 * TICKS_PER_SECOND);
+        let along = |run: &Run, ship| {
+            let state = run.world.ship(ship).unwrap().state;
+            station.along((state.x, state.z))
+        };
+        assert_eq!(run.status(wing).unwrap().phase, Phase::AtDock);
+        let held = along(&run, wing);
+        assert!((held - (station.along(stopped) - DEPART_SPACING)).abs() < 0.5);
+        assert_eq!(run.world.ship(wing).unwrap().state.speed, 0.0);
+        // Out of the way, and the launch carries on.
+        place(&mut run, host, station.world((30.0, 60.0)));
+        steps(&mut run, 2 * TICKS_PER_SECOND);
+        assert_eq!(run.status(wing).unwrap().phase, Phase::Approach);
+    }
+
+    #[test]
+    fn a_late_joiner_queues_behind_the_ship_leaving() {
+        let (mut run, host) = crew_run(41, 2);
+        steps(&mut run, 10);
+        let wing = run.join().unwrap();
+        for _ in 0..10 * TICKS_PER_SECOND {
+            run.step();
+            let along = |ship| {
+                let state = run.world.ship(ship).unwrap().state;
+                run.station.along((state.x, state.z))
+            };
+            if run.status(wing).unwrap().phase == Phase::AtDock
+                && run.status(host).unwrap().phase == Phase::AtDock
+                && along(wing) > HANGAR_START
+            {
+                assert!(along(host) - along(wing) >= DEPART_SPACING - 1e-3);
+            }
+        }
+        assert_eq!(undocked(&events(&mut run)), [host, wing]);
+    }
+
+    #[test]
+    fn a_run_restored_mid_departure_carries_on_from_where_it_was() {
+        let (mut run, ship) = quiet(6);
+        steps(&mut run, 40);
+        let saved = run.world.ship(ship).unwrap().state;
+        let mut restored = Run::restore(&run.checkpoint()).unwrap();
+        assert_eq!(restored.status(ship).unwrap().phase, Phase::AtDock);
+        steps(&mut restored, 20);
+        assert!(restored.world.ship(ship).is_none(), "held inert, waiting");
+        assert!(restored.reconnect(ship));
+        restored.step();
+        let state = restored.world.ship(ship).unwrap().state;
+        let station = restored.station;
+        let moved = station.along((state.x, state.z)) - station.along((saved.x, saved.z));
+        assert!((moved - DEPART_SPEED / 20.0).abs() < 1e-3, "{moved}");
+        undock(&mut restored, ship);
+    }
+
+    /// The ship at `(across, along)` in the station's frame, flying along
+    /// `heading` relative to straight in at `speed`.
+    fn approach(run: &mut Run, ship: ShipId, at: (f32, f32), off: f32, speed: f32) {
+        let station = run.station;
+        let (x, z) = station.world(at);
+        run.world.ship_mut(ship).unwrap().state = ShipState {
+            x,
+            z,
+            heading: (station.heading() + std::f32::consts::PI + off).rem_euclid(TAU),
+            speed,
+        };
+    }
+
+    #[test]
+    fn flying_into_the_mouth_docks_after_a_short_draw_in() {
+        let (mut run, ship) = quiet(6);
+        undock(&mut run, ship);
+        run.pilots[0].cargo = [3, 0, 0];
+        approach(&mut run, ship, (1.5, MOUTH_DISTANCE + 6.0), 0.2, 2.0);
+        run.set_controls(
+            ship,
+            ShipInput {
+                thrust: -1.0,
+                turn: 1.0,
+                cruise: false,
+            },
+            false,
+        );
+        run.step();
+        let captured = run.elapsed();
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Docking);
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Dock)),
+            Err(JumpRefusal::AlreadyThere)
+        );
+        let mut ticks = 0;
+        while run.status(ship).unwrap().phase == Phase::Docking {
+            let state = run.world.ship(ship).unwrap().state;
+            let (across, along) = run.station.local((state.x, state.z));
+            assert!(across.abs() <= 1.5 + 1e-3 && along <= MOUTH_DISTANCE + 6.0 + 1e-3);
+            run.step();
+            ticks += 1;
+            assert!(ticks < 5 * TICKS_PER_SECOND, "the draw-in is short");
+        }
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Docked);
+        let log = events(&mut run);
+        let summary = log
+            .iter()
+            .find_map(|event| match event {
+                RunEvent::Docked { summary, .. } => Some(*summary),
+                _ => None,
+            })
+            .expect("docked");
+        assert_eq!(summary.banked, [3, 0, 0]);
+        // The flight home ends at the capture, not when the draw-in finishes.
+        let undocked_at = run.pilots[0].undocked_at.unwrap();
+        assert_eq!(summary.phases.approach, captured - undocked_at);
+    }
+
+    #[test]
+    fn flying_past_or_out_of_the_mouth_does_not_dock() {
+        let cases = [
+            // Across the front of the mouth, outside the lane's width.
+            (
+                (MOUTH_WIDTH, MOUTH_DISTANCE + 4.0),
+                std::f32::consts::FRAC_PI_2,
+                6.0,
+            ),
+            // Along the lane, outward.
+            ((0.0, MOUTH_DISTANCE + 4.0), std::f32::consts::PI, 6.0),
+            // Drifting at the mouth, barely moving.
+            ((0.0, MOUTH_DISTANCE + 2.0), 0.0, 0.1),
+            // Straight in, but from beyond the capture zone, then braking.
+            ((0.0, MOUTH_DISTANCE + 20.0), 0.0, 0.0),
+            // Beside the hull, flying at it.
+            ((14.0, -6.0), 0.0, 6.0),
+        ];
+        for (at, off, speed) in cases {
+            let (mut run, ship) = quiet(6);
+            undock(&mut run, ship);
+            approach(&mut run, ship, at, off, speed);
+            for _ in 0..3 * TICKS_PER_SECOND {
+                run.step();
+                assert!(
+                    !matches!(
+                        run.status(ship).unwrap().phase,
+                        Phase::Docking | Phase::Docked
+                    ),
+                    "{at:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_hull_is_solid_to_a_ship_flying_at_it() {
+        let (mut run, ship) = quiet(6);
+        undock(&mut run, ship);
+        // From behind the station, straight at its centre.
+        approach(&mut run, ship, (0.0, -40.0), std::f32::consts::PI, 9.0);
+        run.set_controls(
+            ship,
+            ShipInput {
+                thrust: 1.0,
+                ..ShipInput::default()
+            },
+            false,
+        );
+        steps(&mut run, 10 * TICKS_PER_SECOND);
+        let state = run.world.ship(ship).unwrap().state;
+        let (across, along) = run.station.local((state.x, state.z));
+        assert!(along < -14.0, "stopped at the ring: {across}, {along}");
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Approach);
     }
 
     #[test]
@@ -3713,12 +4305,10 @@ mod tests {
         let (mut late, _) = crew_run(40, 2);
         steps(&mut late, JOIN_WINDOW_TICKS + 1);
         assert_eq!(late.join(), None, "the window has closed");
-        // Side by side at the dock, not on top of each other.
-        let (a, b) = (
-            run.world.ship(host).unwrap().state,
-            run.world.ship(second).unwrap().state,
-        );
-        assert!((a.x - b.x).hypot(a.z - b.z) >= 3.9);
+        // The last to join leaves the hangar on its own, the lane clear.
+        steps(&mut run, TICKS_PER_SECOND);
+        let state = run.world.ship(third).unwrap().state;
+        assert!(run.station.along((state.x, state.z)) > HANGAR_START + 7.0);
     }
 
     #[test]
@@ -3728,9 +4318,7 @@ mod tests {
         let wing = run.join().unwrap();
         at_deposit(&mut run, host);
         run.pilots[0].cargo = [12, 0, 0];
-        let dock = run.site.template.dock;
-        place(&mut run, host, dock);
-        run.step();
+        fly_in(&mut run, host);
         assert_eq!(run.ended(), None, "the wing is still out");
         run.world.damage(wing, 10_000.0);
         run.step();
@@ -3748,9 +4336,7 @@ mod tests {
         run.disconnect(wing);
         place(&mut run, host, (-60.0, 5.0));
         run.step();
-        let dock = run.site.template.dock;
-        place(&mut run, host, dock);
-        run.step();
+        fly_in(&mut run, host);
         assert_eq!(run.ended(), Some(EndReason::AllDone));
         let log = events(&mut run);
         assert!(log.iter().any(|event| matches!(
@@ -3767,9 +4353,7 @@ mod tests {
         place(&mut run, wing, (-60.0, 0.0));
         place(&mut run, host, (-60.0, 5.0));
         run.step();
-        let dock = run.site.template.dock;
-        place(&mut run, host, dock);
-        run.step();
+        fly_in(&mut run, host);
         assert_eq!(run.status(host).unwrap().phase, Phase::Docked);
         assert_eq!(run.ended(), None, "the wing is still out");
         (run, host, wing)
@@ -3876,11 +4460,8 @@ mod tests {
         assert_eq!(run.relay(), Relay::Linked);
         assert_eq!(run.pot().relay, 0, "no contract earned yet");
         run.pilots[0].cargo = [12, 0, 0];
-        let dock = run.site.template.dock;
-        place(&mut run, host, dock);
-        run.step();
-        place(&mut run, wing, dock);
-        run.step();
+        fly_in(&mut run, host);
+        fly_in(&mut run, wing);
         let pot = settled(&events(&mut run)).expect("both docked");
         assert_eq!((pot.contract, pot.relay), (160, 80));
         assert_eq!(pot.total(), 240);
@@ -4108,9 +4689,7 @@ mod tests {
         run.pilots[0].cargo = [12, 0, 0];
         run.step();
         run.take_checkpoint();
-        let dock = run.site.template.dock;
-        place(&mut run, host, dock);
-        run.step();
+        fly_in(&mut run, host);
         assert_eq!(run.ended(), None, "the wing is still out");
         let docked = run.take_checkpoint().expect("due when a run ends");
         assert_eq!(docked.crew[0].phase, Phase::Docked);
@@ -4142,6 +4721,7 @@ mod tests {
 
 #[cfg(test)]
 mod wingman_tests {
+    use super::tests::fly_in;
     use super::*;
     use crate::site::COMPACT_SITE;
 
@@ -4163,6 +4743,14 @@ mod wingman_tests {
             },
         );
         let wing = run.hire_wingman(pilots[0], 2, &[], 1).unwrap();
+        // Out of the hangar: the launch flies them, not their orders.
+        for _ in 0..10 * TICKS_PER_SECOND {
+            if run.status(wing).unwrap().phase != Phase::AtDock {
+                break;
+            }
+            run.step();
+        }
+        assert_eq!(run.status(wing).unwrap().phase, Phase::Approach);
         (run, pilots[0], wing)
     }
 
@@ -4176,6 +4764,7 @@ mod wingman_tests {
                 speed: 0.0,
             },
         );
+        run.world.set_scripted(ship, false);
         let index = run.index(ship).unwrap();
         run.pilots[index].phase = Phase::Approach;
     }
@@ -4261,6 +4850,8 @@ mod wingman_tests {
         let (mut run, owner, wing) = launch();
         place(&mut run, wing, (28.0, 0.0));
         run.pilots[1].cargo = [3, 2, 1];
+        // The owner out of the way, off the lane.
+        place(&mut run, owner, (0.0, 60.0));
         run.order_wingman(owner, WingmanOrder::Return).unwrap();
         for _ in 0..600 {
             run.step();
@@ -4268,6 +4859,33 @@ mod wingman_tests {
         assert_eq!(run.status(wing).unwrap().phase, Phase::Docked);
         assert_eq!(run.status(owner).unwrap().cargo, 0);
         assert!(run.take_events().iter().any(|(_, e)| matches!(e, RunEvent::Docked { pilot, summary } if *pilot == wing && summary.banked == [3, 2, 1])));
+    }
+
+    #[test]
+    fn a_wingman_going_home_from_behind_the_hull_flies_round_to_the_lane() {
+        let (mut run, owner, wing) = launch();
+        place(&mut run, owner, (0.0, 60.0));
+        let station = run.station;
+        place(&mut run, wing, station.world((4.0, -32.0)));
+        run.order_wingman(owner, WingmanOrder::Return).unwrap();
+        let mut reached_lane_end = false;
+        let mut captured = false;
+        for _ in 0..90 * TICKS_PER_SECOND {
+            run.step();
+            let phase = run.status(wing).unwrap().phase;
+            captured |= phase == Phase::Docking;
+            if phase == Phase::Docked {
+                break;
+            }
+            let state = run.world.ship(wing).unwrap().state;
+            let (lx, lz) = station.lane_end();
+            reached_lane_end |= (state.x - lx).hypot(state.z - lz) < 6.0;
+            if phase != Phase::Docking {
+                assert!(!station.in_hangar((state.x, state.z)), "only drawn in");
+            }
+        }
+        assert!(reached_lane_end && captured);
+        assert_eq!(run.status(wing).unwrap().phase, Phase::Docked);
     }
 
     #[test]
@@ -4301,9 +4919,7 @@ mod wingman_tests {
         }
         assert_eq!(run.relay(), Relay::Linked);
         run.pilots[0].cargo = [10, 0, 0];
-        let dock = run.site.template.dock;
-        place(&mut run, owner, dock);
-        run.step();
+        fly_in(&mut run, owner);
         assert_eq!(run.pot().contract, run.site.tier.rules().payout);
         assert_eq!(run.pot().relay, run.site.tier.rules().payout / 2);
     }

@@ -14,12 +14,12 @@ import frontier_art as art
 
 
 def hulls(art_root=art.ART):
+    """Each flown hull's size from its manifest. Display hulls are never parked or flown in."""
     result = {}
-    frozen = json.loads((art.ART.parent / "FrontierOutpost/scene_manifest.json").read_text())
-    bounds = frozen["docking_validation"]["ship_bounds_station_space"]
-    result["frigate"] = [bounds["max"][i] - bounds["min"][i] for i in range(3)]
-    for path in (art_root / "hulls").glob("*/*.json"):
+    for path in sorted((art_root / "hulls").glob("*/*.json")):
         manifest = json.loads(path.read_text())
+        if manifest["id"] not in art.CONTRACT["hulls"]["flown"]:
+            continue
         bounds = next(iter(manifest["roots"].values()))["bounds"]
         result[manifest["id"]] = [bounds["max"][i] - bounds["min"][i] for i in range(3)]
     return result
@@ -47,6 +47,9 @@ def check(root, kind, art_root=art.ART):
     nodes = art.CONTRACT["runtime_nodes"]
     children = {o.name: o for o in root.children_recursive}
     sizes = hulls(art_root)
+    for identifier in art.CONTRACT["hulls"]["flown"]:
+        if identifier not in sizes:
+            errors.append(f"hulls: export flown hull {identifier} before checking the station")
     clearance = art.CONTRACT["clearance"]
     boxes = []
     for obj in root.children_recursive:

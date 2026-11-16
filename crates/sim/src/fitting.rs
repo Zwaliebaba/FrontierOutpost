@@ -504,7 +504,11 @@ mod tests {
         let launch = hangar.launch(&EVERYTHING);
         assert!(launch.missing.is_empty());
         assert_eq!(launch.stake(0), 180);
-        assert_eq!(launch.stake(20), 144, "a fabrication bay beside the berth");
+        assert_eq!(
+            launch.stake(20),
+            144,
+            "a fabrication bay beside the hangar deck"
+        );
     }
 
     #[test]

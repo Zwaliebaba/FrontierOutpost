@@ -19,11 +19,29 @@ fire in one of four scenes: open crossing traffic, a fight around the reference 
 asteroid, a fight around a proxy of the home station, and ships heading toward and away from the
 camera. The tester steers one ship with W A S D or the arrow keys.
 
+The station scene shows one of three stations, by scale against the Stage 1 station's 14.6 m:
+
+- **×1**, the Stage 1 station the game draws today: a dozen boxes and cylinders from
+  `create_scene.py`, with its landing apron. The baseline.
+- **×2.2**, the default: the M9 ring as `Design/Art/station/exterior` authors it (32.4 m across),
+  about fifty boxes and cylinders from `model_station.py` and `refine_station.py`. Its ring
+  leaves a gap for the hangar; the cheeks, roof and portal frame wall and cover an 8 m by 3.5 m
+  mouth, and the contract's 30 m lane beyond it is clear.
+- **×3**, the same ring scaled by 3/2.2, heights included.
+
+The traffic moves out as far as the station grows past the Stage 1 station, so it passes around
+and in front of the station at the same distance from its edge, and the tester starts that much
+further out toward the camera. Around the ring, two hostiles (H1, H5) and an ally (A1) fly in
+along the lane, turn round under the hangar roof and fly out again, so trials and the hidden-time
+measure include ships in and near the mouth.
+
 The panel changes one variable at a time; every setting is also a URL parameter, so a
 configuration can be shared as a link.
 
 | Setting           | Values                                                         | Tests                                                                         |
 | ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Station scale     | ×1, ×2.2, ×3                                                   | Which station size keeps ships readable at the dock (plan 9.1)                |
+| Hangar mouth      | toward the site, toward the camera, side-on, away              | Whether the ring hides ships with its mouth turned each way                   |
 | Camera elevation  | 33°, 40°, 45°, 50°                                             | Whether the current 33° view should stand                                     |
 | Projection        | orthographic, narrow perspective (20°), wide perspective (45°) | Whether the view needs depth cues that orthographic cannot give               |
 | Look around       | off, hold, free                                                | Whether the tester may orbit the camera, and whether it springs back          |
@@ -60,6 +78,39 @@ The default backdrop is a seeded star field on near-black, drawn at infinity so 
 with the camera and ignores zoom. It is darker than the style guide's background baseline, which
 the `dark` backdrop still shows as a flat colour.
 
+## Comparing station scales (plan 9.1)
+
+The mouth faces the site in play, the way ships launch. Both of frontier-sim's sites lie along
++X, so **toward the site** is the default: the mouth then points to the lower right of the
+resting view. The other facings show what a site in another direction would do: toward the
+camera, side-on (to the right of the screen), and away from the camera, where the hangar's roof
+and cheeks stand between the camera and the lane. The Stage 1 station ignores the facing.
+
+Run the greybox block once per station, as the playtest script runs it per vision mode: three
+runs of eight trials, in normal, grey and one colour-deficient vision, at the default settings
+otherwise.
+
+```text
+/greybox.html?scene=station&scale=1&vision=normal         the baseline; then grey, deutan
+/greybox.html?scene=station&scale=2.2&vision=normal       the ring as authored; then grey, deutan
+/greybox.html?scene=station&scale=3&vision=normal         the larger ring; then grey, deutan
+/greybox.html?scene=station&scale=2.2&facing=away         a facing to compare, at a chosen scale
+```
+
+A link without `scale` runs the ring at ×2.2, so the playtest script's links now do too; add
+`scale=1` for the station the game draws today. Each download's name carries its station, for
+example `greybox-station-2.2x-site-33deg.json`. The report reads the scene, scale and facing from
+each file and gives gate 2's measures for each station and vision mode apart, with a verdict per
+station, so results from different stations are never pooled:
+
+```sh
+cargo run --release -p frontier-server -- report greybox/*.json
+```
+
+The gate's own verdict still takes every file passed, so to judge one scale against gate 2's
+thresholds, read its row in the table by setting, or pass only its files. Files from before
+the scale was recorded count as the Stage 1 station.
+
 ## What it measures
 
 Space starts a run of three kinds of trial, shuffled:
@@ -80,10 +131,14 @@ the rules the game uses, not a copy of them.
 
 - The limits shown beside results are the review's starting hypotheses. The design leaves gate
   thresholds and cohort sizes open.
-- Ships are extruded outlines at the starter frigate's dimensions, and the station is a dozen
-  boxes and cylinders taken from `create_scene.py`. The harness loads no GLB.
-- The station's landing deck is assumed to lie on the gameplay plane. Neither design document
-  defines that datum yet.
+- Ships are extruded outlines at the starter frigate's dimensions, and each station is boxes and
+  cylinders bounding its art's parts: trim, windows and stencils are inside them, and the ring's
+  tells are left out because what stands on them depends on the outpost. The harness loads no
+  GLB.
+- The Stage 1 station's landing deck is assumed to lie on the gameplay plane. The ring's hangar
+  deck and mouth are authored at its plane.
+- Ships fly through structures: nothing here collides. The ring's routes keep ship centres out
+  of it on the plane.
 - Steering, weapons and NPC routes are placeholders written for this harness. The real rules
   belong in `frontier-sim`.
 - Colour-vision modes are approximate simulations, not a substitute for testers.

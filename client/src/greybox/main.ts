@@ -27,6 +27,7 @@ import {
   VISION_MODES,
   configToSearch,
   parseConfig,
+  resultFileName,
 } from "./config";
 import type { Config } from "./config";
 import type { ShipInput } from "./kinematics";
@@ -40,6 +41,7 @@ import { createRng } from "../view/rng";
 import { createStarField } from "../view/sky";
 import { MAX_BOLTS, SCENE_IDS, SCENE_LABELS, createWorld, stepWorld } from "./scenarios";
 import type { Allegiance, Ship } from "./scenarios";
+import { MOUTH_FACINGS, STATION_SCALES } from "./stationProxy";
 import {
   HEADING_TOLERANCE_DEG,
   PROVISIONAL_THRESHOLDS,
@@ -127,7 +129,10 @@ try {
   console.warn("The frigate did not load; player ships are the stand-in wedge.", error);
 }
 
-const world = createWorld(config.scene, config.seed, config.heights);
+const world = createWorld(config.scene, config.seed, config.heights, {
+  scale: config.scale,
+  facing: config.facing,
+});
 const cameraTarget = new Vector3();
 let viewport = { width: 1, height: 1 };
 // The configured width is where the view starts; the wheel zooms from there.
@@ -202,6 +207,8 @@ function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMate
         material,
       );
       mesh.position.set(occluder.x, occluder.yMin + height / 2, occluder.z);
+      // A turn about +Y by r takes the box's X axis to a bearing of -r on the plane.
+      mesh.rotation.y = -(occluder.yaw ?? 0);
       return mesh;
     }
   }
@@ -559,6 +566,27 @@ const controls: { key: keyof Config; label: string; choices: Choice[] }[] = [
     label: "Scene",
     choices: SCENE_IDS.map((id): Choice => [id, SCENE_LABELS[id]]),
   },
+  {
+    key: "scale",
+    label: "Station scale",
+    choices: STATION_SCALES.map((scale): Choice => [
+      String(scale),
+      scale === 1 ? "×1, Stage 1 station" : `×${String(scale)}, M9 ring`,
+    ]),
+  },
+  {
+    key: "facing",
+    label: "Hangar mouth",
+    choices: MOUTH_FACINGS.map((id): Choice => [
+      id,
+      {
+        site: "Toward the site (+X)",
+        camera: "Toward the camera",
+        side: "Side-on, to the right",
+        away: "Away from the camera",
+      }[id],
+    ]),
+  },
   { key: "elevation", label: "Camera elevation", choices: same(ELEVATIONS, "°") },
   {
     key: "projection",
@@ -711,7 +739,7 @@ function renderResults(): void {
     };
     const link = element("a");
     link.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)]));
-    link.download = `greybox-${config.scene}-${String(config.elevation)}deg.json`;
+    link.download = resultFileName(config);
     link.click();
     URL.revokeObjectURL(link.href);
   });

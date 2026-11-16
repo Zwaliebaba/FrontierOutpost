@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 14;
+pub const PROTOCOL_VERSION: u32 = 15;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -229,6 +229,7 @@ pub enum ServerMessage {
         ship_id: u16,
         tick_rate: u32,
         tier: u32,
+        /// The site's asteroids. The station's hull is in `site.station`.
         obstacles: Vec<ObstacleInfo>,
         /// The deposits the pilot can work, in the order snapshots report them.
         deposits: Vec<DepositInfo>,
@@ -332,10 +333,6 @@ pub struct CrewInfo {
 #[ts(export)]
 pub struct CrewMember {
     pub callsign: String,
-    /// Zero-based berth slot, stable while following an active launch.
-    #[ts(optional)]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub berth: Option<u32>,
     /// Their share of the pot, a whole percentage.
     pub share: u32,
     /// Whether this is the pilot reading it.
@@ -390,8 +387,37 @@ pub struct SiteInfo {
     pub centre_z: f32,
     pub radius: f32,
     pub pockets: Vec<PocketInfo>,
-    /// Entering this circle around the dock after undocking docks the ship.
-    pub dock_radius: f32,
+    /// The station standing at the dock.
+    pub station: StationInfo,
+}
+
+/// The station at a site's dock (plan 9.4), in world coordinates, so the
+/// client can draw it and predict against it without the rules' numbers. Its
+/// mouth faces the site's centre; the hangar lies behind the mouth, and the
+/// approach lane runs straight out of it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct StationInfo {
+    pub centre_x: f32,
+    pub centre_z: f32,
+    /// The unit direction out of the hangar mouth.
+    pub forward_x: f32,
+    pub forward_z: f32,
+    /// The centre of the hangar mouth.
+    pub mouth_x: f32,
+    pub mouth_z: f32,
+    /// A launch flies the ship out this far beyond the mouth, then hands it
+    /// to its pilot: it has undocked there.
+    pub lane_length: f32,
+    /// A ship flying in within this far in front of the mouth, and within
+    /// its width, is captured and drawn in to dock.
+    pub capture_depth: f32,
+    pub mouth_width: f32,
+    /// No part of the station reaches farther from its centre.
+    pub footprint_radius: f32,
+    /// The solid hull, which ships collide with as with asteroids.
+    pub obstacles: Vec<ObstacleInfo>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -851,7 +877,23 @@ mod tests {
                     locked: true,
                     material: Some(Material::Volatiles),
                 }],
-                dock_radius: 15.0,
+                station: StationInfo {
+                    centre_x: -900.0,
+                    centre_z: 0.0,
+                    forward_x: 1.0,
+                    forward_z: 0.0,
+                    mouth_x: -886.0,
+                    mouth_z: 0.0,
+                    lane_length: 30.0,
+                    capture_depth: 8.0,
+                    mouth_width: 8.0,
+                    footprint_radius: 17.0,
+                    obstacles: vec![ObstacleInfo {
+                        x: -900.0,
+                        z: -1.0,
+                        radius: 7.6,
+                    }],
+                },
             },
             hazard: Hazard::IonFog,
             dominant_threat: DominantThreat::Balanced,

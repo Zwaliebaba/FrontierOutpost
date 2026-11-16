@@ -818,6 +818,280 @@
       },
       "sha256": "874445dd5812f12a0aa1013800c90d73ba891d6478ad4361f6b372064324b9c9"
     },
+    "hull:cruiser": {
+      "glb": "hulls/cruiser/cruiser.glb",
+      "id": "cruiser",
+      "kind": "hull",
+      "pending": false,
+      "roots": {
+        "Hull_cruiser": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              2.020000457763672,
+              5.399999618530273,
+              1.7999999523162842
+            ],
+            "min": [
+              -2.0199999809265137,
+              -5.222499847412109,
+              -0.6800000667572021
+            ]
+          },
+          "footprint_radius": 5.76544861476473,
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "Orange",
+            "Titanium",
+            "WhiteCore"
+          ],
+          "nodes": [
+            "Cruiser | armored shoulder",
+            "Cruiser | armored shoulder.001",
+            "Cruiser | bridge superstructure",
+            "Cruiser | bridge window",
+            "Cruiser | bridge window.001",
+            "Cruiser | bridge window.002",
+            "Cruiser | comms aerial",
+            "Cruiser | dorsal spine",
+            "Cruiser | engine armor cap",
+            "Cruiser | engine armor cap.001",
+            "Cruiser | engine luminous core",
+            "Cruiser | engine luminous core.001",
+            "Cruiser | engine marker",
+            "Cruiser | engine marker.001",
+            "Cruiser | engine surround",
+            "Cruiser | engine surround.001",
+            "Cruiser | flank armor",
+            "Cruiser | flank armor.001",
+            "Cruiser | flank armor.002",
+            "Cruiser | flank armor.003",
+            "Cruiser | flank armor.004",
+            "Cruiser | flank armor.005",
+            "Cruiser | flank armor.006",
+            "Cruiser | flank armor.007",
+            "Cruiser | flank armor.008",
+            "Cruiser | flank armor.009",
+            "Cruiser | flank dark insert",
+            "Cruiser | flank dark insert.001",
+            "Cruiser | flank dark insert.002",
+            "Cruiser | flank dark insert.003",
+            "Cruiser | flank dark insert.004",
+            "Cruiser | flank dark insert.005",
+            "Cruiser | flank dark insert.006",
+            "Cruiser | flank dark insert.007",
+            "Cruiser | flank dark insert.008",
+            "Cruiser | flank dark insert.009",
+            "Cruiser | forward green nav",
+            "Cruiser | forward green nav.001",
+            "Cruiser | hull registry",
+            "Cruiser | keel",
+            "Cruiser | orange hull band",
+            "Cruiser | orange hull band.001",
+            "Cruiser | point defense barrel",
+            "Cruiser | point defense barrel.001",
+            "Cruiser | point defense base",
+            "Cruiser | point defense base.001",
+            "Cruiser | radiator bed",
+            "Cruiser | radiator bed.001",
+            "Cruiser | radiator bed.002",
+            "Cruiser | radiator fin",
+            "Cruiser | radiator fin.001",
+            "Cruiser | radiator fin.002",
+            "Cruiser | radiator fin.003",
+            "Cruiser | radiator fin.004",
+            "Cruiser | radiator fin.005",
+            "Cruiser | radiator fin.006",
+            "Cruiser | radiator fin.007",
+            "Cruiser | radiator fin.008",
+            "Cruiser | radiator fin.009",
+            "Cruiser | radiator fin.010",
+            "Cruiser | radiator fin.011",
+            "Cruiser | radiator fin.012",
+            "Cruiser | radiator fin.013",
+            "Cruiser | radiator fin.014",
+            "Cruiser | rear engine housing",
+            "Cruiser | rear engine housing.001",
+            "Cruiser | recessed bridge glazing",
+            "Cruiser | top armor",
+            "Cruiser | top armor.001",
+            "Cruiser | top armor.002",
+            "Cruiser | top armor.003",
+            "Cruiser | top armor.004",
+            "Cruiser | top armor.005",
+            "Cruiser | top armor.006",
+            "Cruiser | top armor.007",
+            "Cruiser | top armor.008",
+            "Cruiser | top armor.009",
+            "Cruiser | top fastener",
+            "Cruiser | top fastener.001",
+            "Cruiser | top fastener.002",
+            "Cruiser | top fastener.003",
+            "Cruiser | top fastener.004",
+            "Cruiser | top fastener.005",
+            "Cruiser | top fastener.006",
+            "Cruiser | top fastener.007",
+            "Cruiser | top fastener.008",
+            "Cruiser | top fastener.009",
+            "Hull_cruiser"
+          ],
+          "triangles": 5292
+        }
+      },
+      "sha256": "3fe9fe5da7c19bfaf302655a36a759e81f37c27723a9bfda6d39919e599f42db"
+    },
+    "hull:frigate": {
+      "glb": "hulls/frigate/frigate.glb",
+      "id": "frigate",
+      "kind": "hull",
+      "pending": false,
+      "roots": {
+        "Hull_frigate": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.6455000042915344,
+              1.299999713897705,
+              0.7000000476837158
+            ],
+            "min": [
+              -0.6455000638961792,
+              -1.3650000095367432,
+              -0.4399999678134918
+            ]
+          },
+          "footprint_radius": 1.5099322364017798,
+          "materials": [
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "IdleCyan",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "Frigate | armor fastener",
+            "Frigate | armor fastener.001",
+            "Frigate | armor fastener.002",
+            "Frigate | armor fastener.003",
+            "Frigate | bridge",
+            "Frigate | bridge glazing",
+            "Frigate | bridge mullion",
+            "Frigate | compact spine",
+            "Frigate | cooling fin",
+            "Frigate | cooling fin.001",
+            "Frigate | cooling fin.002",
+            "Frigate | cooling fin.003",
+            "Frigate | dorsal armor",
+            "Frigate | dorsal armor.001",
+            "Frigate | dorsal armor.002",
+            "Frigate | dorsal armor.003",
+            "Frigate | engine armor cap",
+            "Frigate | engine armor cap.001",
+            "Frigate | engine housing",
+            "Frigate | engine housing.001",
+            "Frigate | flank recess",
+            "Frigate | flank recess.001",
+            "Frigate | flank recess.002",
+            "Frigate | flank recess.003",
+            "Frigate | hull number",
+            "Frigate | idle engine aperture",
+            "Frigate | idle engine aperture.001",
+            "Frigate | keel",
+            "Frigate | landing foot",
+            "Frigate | landing foot.001",
+            "Frigate | landing foot.002",
+            "Frigate | landing strut",
+            "Frigate | landing strut.001",
+            "Frigate | landing strut.002",
+            "Frigate | nav marker",
+            "Frigate | nav marker.001",
+            "Frigate | orange identification band",
+            "Frigate | orange identification band.001",
+            "Frigate | short aerial",
+            "Frigate | short defense barrel",
+            "Frigate | shoulder armor",
+            "Frigate | shoulder armor.001",
+            "Frigate | shoulder armor.002",
+            "Frigate | shoulder armor.003",
+            "Frigate | single defense mount",
+            "Hull_frigate"
+          ],
+          "triangles": 2192
+        }
+      },
+      "sha256": "80e2d2808dff6226a60e53d07d14e3722507b8c8498302580285a73b96b8eab1"
+    },
+    "npc:raider": {
+      "glb": "npcs/raider/raider.glb",
+      "id": "raider",
+      "kind": "npc",
+      "pending": false,
+      "roots": {
+        "Npc_raider": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.9110769033432007,
+              0.995673656463623,
+              0.42090970277786255
+            ],
+            "min": [
+              -0.9110769033432007,
+              -0.9175384640693665,
+              -0.11630769073963165
+            ]
+          },
+          "collision_radius": 1.3,
+          "footprint_radius": 1.2160974355581462,
+          "materials": [
+            "Ember",
+            "Graphite",
+            "HostileArmor",
+            "HostileHull"
+          ],
+          "nodes": [
+            "Blade armour -1__Npc_raider",
+            "Blade armour 1__Npc_raider",
+            "Carapace seam -1 0__Npc_raider",
+            "Carapace seam -1 1__Npc_raider",
+            "Carapace seam -1 2__Npc_raider",
+            "Carapace seam 1 0__Npc_raider",
+            "Carapace seam 1 1__Npc_raider",
+            "Carapace seam 1 2__Npc_raider",
+            "Command crystal__Npc_raider",
+            "Conduit -1 0__Npc_raider",
+            "Conduit -1 1__Npc_raider",
+            "Conduit -1 2__Npc_raider",
+            "Conduit 1 0__Npc_raider",
+            "Conduit 1 1__Npc_raider",
+            "Conduit 1 2__Npc_raider",
+            "Dorsal shell__Npc_raider",
+            "Drive core -0.18__Npc_raider",
+            "Drive core 0.18__Npc_raider",
+            "Drive housing -0.18__Npc_raider",
+            "Drive housing 0.18__Npc_raider",
+            "Emitter housing -1__Npc_raider",
+            "Emitter housing 1__Npc_raider",
+            "Emitter lens -1__Npc_raider",
+            "Emitter lens 1__Npc_raider",
+            "Keel__Npc_raider",
+            "Npc_raider",
+            "Spine fin -1__Npc_raider",
+            "Spine fin 1__Npc_raider",
+            "Swept blade -1__Npc_raider",
+            "Swept blade 1__Npc_raider"
+          ],
+          "triangles": 2612
+        }
+      },
+      "sha256": "4b12faf57ec2ec8a0f42a05d3654670d4ba72472ddcdd8fe597568c3240f8601"
+    },
     "station_exterior:exterior": {
       "glb": "station/exterior/exterior.glb",
       "id": "exterior",
@@ -987,6 +1261,7 @@
               -10.800000190734863
             ]
           },
+          "footprint_radius": 16.818029400763855,
           "materials": [
             "Amber",
             "Armor",
@@ -2393,21 +2668,6 @@
       "glb": "../FrontierOutpost/asteroids.glb",
       "root": null,
       "sha256": "f8f1a54cdf951d56dce87219ad8bc2e116c34da84dee51289bab8286511a7ccd"
-    },
-    "cruiser": {
-      "glb": "../FrontierOutpost/cruiser.glb",
-      "root": "Cruiser_ROOT",
-      "sha256": "f5fe8eb13875e836da76780d037df8306ad307d4b2a7247d210e63d48759cd25"
-    },
-    "frigate": {
-      "glb": "../FrontierOutpost/frigate.glb",
-      "root": "Frigate_ROOT",
-      "sha256": "5efd79dda69b3179e0cdab8e8cb7d2e7942ba4896338e916f2026ac9cf90d915"
-    },
-    "station": {
-      "glb": "../FrontierOutpost/station.glb",
-      "root": "Station_ROOT",
-      "sha256": "7e525658ae8e73f2e48947da274786998dbd58c91e9b2839b26fe01cc64cb7b4"
     }
   },
   "schema_version": 1

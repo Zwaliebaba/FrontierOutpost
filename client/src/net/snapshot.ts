@@ -23,6 +23,7 @@ const PHASES: readonly RunPhase[] = [
   "approach",
   "objective",
   "return",
+  "docking",
   "docked",
   "destroyed",
   "abandoned",

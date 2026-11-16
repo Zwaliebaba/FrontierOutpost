@@ -1,7 +1,7 @@
 import { ExtrudeGeometry, Shape } from "three";
 import type { BufferGeometry } from "three";
 
-/** Starter frigate bounds from `scene_manifest.json` (docking_validation), in metres. */
+/** The starter frigate's landed bounds (Design/Art/hulls/frigate's manifest), in metres. */
 export const SHIP_LENGTH = 2.67;
 export const SHIP_BEAM = 1.29;
 export const SHIP_HEIGHT = 1.14;

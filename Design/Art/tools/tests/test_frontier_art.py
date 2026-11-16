@@ -34,8 +34,8 @@ class PipelineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="frontier-art-tests-")
-        cls.art = Path(cls.temp.name)
-        (cls.art / "library").mkdir()
+        cls.art = Path(cls.temp.name) / "Art"
+        (cls.art / "library").mkdir(parents=True)
         shutil.copyfile(art.ART / "library/materials.blend", cls.art / "library/materials.blend")
 
     @classmethod
@@ -120,9 +120,9 @@ class PipelineTests(unittest.TestCase):
         self.assertFailure("visibility")
 
     def test_template_retains_library_on_reopen(self):
-        path = art.asset_path("hull", "template_test", self.art)
+        path = art.asset_path("hull", "cruiser", self.art)
         shutil.rmtree(path.parent, ignore_errors=True)
-        art.new_asset("hull", "template_test", art=self.art)
+        art.new_asset("hull", "cruiser", art=self.art)
         bpy.ops.wm.open_mainfile(filepath=str(path))
         self.assertTrue(all(role in bpy.data.materials for role in art.CONTRACT["materials"]))
         for role in art.CONTRACT["materials"]:
@@ -167,7 +167,66 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs"):
             art.new_asset("facility", "sensor_array", tiers=3, art=self.art)
 
+    def test_hulls_must_be_listed_in_the_contract(self):
+        with self.assertRaisesRegex(ValueError, "Unknown hull"):
+            art.new_asset("hull", "hauler", art=self.art)
+
+    def test_flown_hull_must_pass_the_mouth_and_display_hull_need_not(self):
+        # The fixture exterior's mouth is the rules' 8 m: a 7.8 m beam leaves 0.1 m a side.
+        self.station_fixture("station_exterior")
+        bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
+        art.export_asset(self.art)
+        self.fixture("hull")
+        bpy.data.objects["hull"].scale.x = 7.8
+        self.assertFailure("hull_fit")
+        path = art.asset_path("hull", "cruiser", self.art)
+        shutil.rmtree(path.parent, ignore_errors=True)
+        art.new_asset("hull", "cruiser", art=self.art)
+        cube(bpy.data.objects["Hull_cruiser"], "long hull", (4, 10.6, 2.5))
+        bpy.context.view_layer.update()
+        self.assertEqual(art.check_asset(self.art)[0], [])
+
+    def npc_fixture(self, size=(1.6, 1.8, .4)):
+        path = art.asset_path("npc", "raider", self.art)
+        shutil.rmtree(path.parent, ignore_errors=True)
+        art.new_asset("npc", "raider", art=self.art)
+        cube(bpy.data.objects["Npc_raider"], "carapace", size, material=bpy.data.materials["HostileHull"])
+        bpy.context.view_layer.update()
+        return path
+
+    def test_good_npc_records_its_footprint(self):
+        self.npc_fixture()
+        errors, records = art.check_asset(self.art)
+        self.assertEqual(errors, [])
+        record = records["Npc_raider"]
+        self.assertAlmostEqual(record["footprint_radius"], (.8 ** 2 + .9 ** 2) ** .5, places=4)
+        self.assertEqual(record["collision_radius"], 1.3)
+
+    def test_npc_beyond_its_collision_circle_rejected(self):
+        # A box 2 m square fits the 1.3 m radius by its sides (1 m) but not its corners (1.41 m).
+        self.npc_fixture((2, 2, .4))
+        self.assertFailure("footprint")
+
+    def test_npc_must_be_a_ship_kind(self):
+        with self.assertRaisesRegex(ValueError, "Unknown NPC"):
+            art.new_asset("npc", "pirate", art=self.art)
+
+    def test_library_gains_missing_roles_and_keeps_the_rest(self):
+        path = self.art / "library/materials.blend"
+        with self.assertRaisesRegex(ValueError, "Refusing"):
+            art.build_library(path)
+        art.build_library(path, add_missing=True)
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        materials = art.linked_materials(self.art)
+        self.assertEqual(set(materials), set(art.CONTRACT["materials"]))
+        self.assertTrue(all(art.material_matches_contract(m) for m in materials.values()))
+
     def station_fixture(self, kind):
+        # The station checks size parking places from each flown hull's manifest.
+        frigate = self.art / "hulls/frigate/frigate.json"
+        frigate.parent.mkdir(parents=True, exist_ok=True)
+        frigate.write_text(json.dumps({"id": "frigate", "roots": {"Hull_frigate": {
+            "bounds": {"min": [-.65, -1.37, -.44], "max": [.65, 1.3, .7]}}}}))
         identifier = kind.removeprefix("station_")
         path = art.asset_path(kind, identifier, self.art)
         shutil.rmtree(path.parent, ignore_errors=True)
@@ -176,7 +235,8 @@ class PipelineTests(unittest.TestCase):
         from mathutils import Vector
         right = Vector((.858, .513, 0)).normalized()
         if kind == "station_exterior":
-            for name, offset in zip(art.CONTRACT["runtime_nodes"]["tells"], [-30, -10, 10, 30]):
+            # Within the rules' footprint (17 m), across the view so no tell hides another.
+            for name, offset in zip(art.CONTRACT["runtime_nodes"]["tells"], [-14, -5, 5, 14]):
                 position = right * offset
                 position.z = .2
                 cube(root, "Hull_" + name, (1, 1, .4), position)
@@ -200,9 +260,11 @@ class PipelineTests(unittest.TestCase):
     def test_station_failures(self):
         cases = [
             ("station_exterior", "mouth", lambda root: bpy.data.objects["Hangar_Mouth"].__setitem__("opening_width", 1)),
-            ("station_exterior", "lane", lambda root: cube(root, "Blocker", (1, 1, 1), (0, 10, .5))),
+            ("station_exterior", "lane", lambda root: cube(root, "Blocker", (1, 1, 1), (0, 24, .5))),
+            ("station_exterior", "rules", lambda root: setattr(bpy.data.objects["Hangar_Mouth"].location, "y", 12)),
+            ("station_exterior", "rules", lambda root: cube(root, "Overhang", (1, 1, .4), (17.5, 0, .2))),
             ("station_exterior", "anchors", lambda root: bpy.data.objects.remove(bpy.data.objects["Tell_A"], do_unlink=True)),
-            ("station_exterior", "tell_lane", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (0, 10, 0))),
+            ("station_exterior", "tell_lane", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (0, 24, 0))),
             ("station_exterior", "hardpoint", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (50, 50, 50))),
             ("station_interior", "occlusion", lambda root: setattr(bpy.data.objects["Socket_B"], "location", bpy.data.objects["Socket_A"].location)),
             ("station_interior", "runtime", lambda root: bpy.data.objects.remove(bpy.data.objects["Closure_C"], do_unlink=True)),
@@ -215,10 +277,12 @@ class PipelineTests(unittest.TestCase):
                 self.assertFailure(code)
 
     def test_exports_each_supported_kind(self):
-        for kind in ["hull", "station_exterior", "station_interior"]:
+        for kind in ["hull", "npc", "station_exterior", "station_interior"]:
             with self.subTest(kind=kind):
                 if kind == "hull":
                     source = self.fixture(kind)
+                elif kind == "npc":
+                    source = self.npc_fixture()
                 else:
                     self.station_fixture(kind)
                     source = Path(bpy.data.filepath)
@@ -226,6 +290,27 @@ class PipelineTests(unittest.TestCase):
                 manifest = json.loads(art.export_asset(self.art).read_text())
                 self.assertEqual(manifest["kind"], kind)
                 self.assertEqual(manifest["sha256"], art.sha(source.with_suffix(".glb")))
+
+    def test_reexport_keeps_the_preview_of_an_unchanged_model(self):
+        source = self.fixture("hull")
+        bpy.ops.wm.save_as_mainfile(filepath=str(source))
+        manifest_path = art.export_asset(self.art)
+        preview = source.with_suffix(".png")
+        before = art.sha(preview)
+        # As after a tool or contract change: inputs differ, the model does not.
+        manifest = json.loads(manifest_path.read_text())
+        manifest["inputs"]["tool"] = "older tool"
+        manifest_path.write_text(json.dumps(manifest))
+        bpy.ops.wm.open_mainfile(filepath=str(source))
+        art.export_asset(self.art)
+        self.assertEqual(art.sha(preview), before)
+        self.assertEqual(json.loads(manifest_path.read_text())["preview_sha256"], before)
+        # A changed model is rendered again.
+        bpy.data.objects["hull"].scale.x = .5
+        bpy.ops.wm.save_as_mainfile(filepath=str(source))
+        art.export_asset(self.art)
+        self.assertEqual(json.loads(manifest_path.read_text())["preview_sha256"], art.sha(preview))
+        self.assertNotEqual(art.sha(preview), before)
 
     def test_export_and_idempotence(self):
         source = self.fixture()
